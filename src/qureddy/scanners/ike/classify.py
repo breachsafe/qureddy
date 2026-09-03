@@ -146,6 +146,26 @@ def _identity_finding(asset: Asset, evidence: list[Evidence]) -> Finding | None:
     )
 
 
+def _psk_exposure_finding(asset: Asset, evidence: list[Evidence]) -> Finding | None:
+    """Report offline PSK-cracking exposure without retaining the material."""
+    records = [record for record in evidence if record.evidence_type == "ike.psk_hash_exposed"]
+    if not records:
+        return None
+    return _finding(
+        asset,
+        records,
+        rule_id="ike.v1.aggressive.psk_hash_exposed",
+        finding_type="ike.aggressive.psk_hash_exposed",
+        title="IKEv1 Aggressive Mode PSK hash exposed",
+        description=(
+            "The response contained parameters sufficient for offline PSK guessing. "
+            "Values are omitted from scan output."
+        ),
+        severity=Severity.HIGH,
+        readiness=Readiness.CLASSICALLY_WEAK,
+    )
+
+
 def _prohibited_transport_finding(asset: Asset, records: list[Evidence]) -> Finding | None:
     """Build the RFC 8247 prohibited-transform finding when evidence exists."""
     if not records:
@@ -341,7 +361,11 @@ def classify_ike(asset: Asset, evidence: list[Evidence]) -> list[Finding]:
     findings = _protocol_findings(asset, evidence)
     findings.extend(_transport_findings(asset, evidence))
     findings.extend(_dh_findings(asset, evidence))
-    for optional in (_identity_finding(asset, evidence), _notify_finding(asset, evidence)):
+    for optional in (
+        _identity_finding(asset, evidence),
+        _psk_exposure_finding(asset, evidence),
+        _notify_finding(asset, evidence),
+    ):
         if optional is not None:
             findings.append(optional)
     return findings

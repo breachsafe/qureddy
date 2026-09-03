@@ -121,6 +121,16 @@ def test_protocol_identity_legacy_and_notify_findings() -> None:
             protocol="ike",
             confidence=Confidence.LOW,
         ),
+        Evidence(
+            id="ev-psk",
+            asset_id="asset-ike",
+            evidence_type="ike.psk_hash_exposed",
+            observation_type=ObservationType.OBSERVED,
+            source="fixture",
+            protocol="ike",
+            protocol_version="IKEv1",
+            confidence=Confidence.LOW,
+        ),
         _algorithm("ike.notify", "NO_PROPOSAL_CHOSEN"),
     ]
 
@@ -129,8 +139,13 @@ def test_protocol_identity_legacy_and_notify_findings() -> None:
         "ike.v2.tool_reported",
         "ike.transport.legacy_3des",
         "ike.v1.aggressive.identity_exposed",
+        "ike.v1.aggressive.psk_hash_exposed",
         "ike.proposal.rejected",
     }
+
+    psk = next(item for item in classify_ike(_asset(), records) if item.evidence_ids == ("ev-psk",))
+    assert psk.severity.value == "high"
+    assert psk.readiness is Readiness.CLASSICALLY_WEAK
 
 
 def test_prohibited_group_and_empty_finding_guard() -> None:

@@ -52,8 +52,10 @@ flowchart LR
     adapter --> process["Bounded process runner"]
     process --> tool["stock ike-scan"]
     tool --> peer["IKE responder UDP 500 or 4500"]
+    tool --> private["private PSK-hash check\ndeleted after probe"]
     tool --> parser["IKE text parser"]
-    parser --> evidence["Canonical Evidence"]
+    private --> evidence["Canonical Evidence"]
+    parser --> evidence
     evidence --> policy["IKE classifier and shared posture"]
     policy --> result["One immutable ScanResult"]
     result --> rich["Rich"]
@@ -64,7 +66,9 @@ flowchart LR
 
 The process and network edges are trust boundaries. The adapter bounds runtime and combined
 output size, records the executable version and output digests, and assigns low confidence to
-tool-reported observations. Renderers receive the canonical result and never invoke `ike-scan`.
+tool-reported observations. For an Aggressive Mode probe, it validates stock `--pskcrack` output
+in a private run-scoped file, emits only the exposure fact, and deletes the file. Renderers receive
+the canonical result and never invoke `ike-scan`.
 
 ```mermaid
 flowchart TB
@@ -95,8 +99,8 @@ and output projection remain shared. CBOM generation is one renderer with thin p
 ## 5. Trust and claim limits
 
 The backend records responder presence, explicit NOTIFY rejection, tool-reported transforms,
-Historic IKEv1, and aggressive-mode identity exposure. It assigns low confidence to external-tool
-observations.
+Historic IKEv1, and Aggressive Mode identity or PSK-hash exposure. It assigns low confidence to
+external-tool observations and omits identity and PSK-hash values from `ScanResult`.
 
 Stock `ike-scan` 1.9.5 labels its IKEv2 support experimental and sends one default proposal. Its
 output does not prove comprehensive algorithm support, RFC 9370 additional key exchange

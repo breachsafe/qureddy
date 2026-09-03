@@ -22,9 +22,11 @@ from qureddy.scanners.ike.adapter import (
 )
 from qureddy.scanners.ike.execution import ProcessOutput
 from qureddy.scanners.ike.parser import ParsedIKEResponse
+from qureddy.scanners.ike.psk import is_pskcrack_artifact, temporary_pskcrack_path
 from qureddy.scanners.ike.types import IKEMode, IKEParseStatus
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "ike"
+_PSKCRACK_LINE = ":".join(f"{value:02x}" for value in range(1, 10))
 
 
 def _tool(tmp_path: Path, body: str) -> str:
@@ -87,13 +89,100 @@ print("Handshake returned (1 transforms) Encr=AES KeyLength=256 Prf=SHA2 Integ=H
     }
 
 
+def test_aggressive_probe_detects_psk_exposure_without_serializing_material(
+    tmp_path: Path,
+) -> None:
+    """Keep HASH_R private while emitting one canonical exposure observation (#763)."""
+    binary = _tool(
+        tmp_path,
+        f'''if "--version" in sys.argv:
+    print("ike-scan 9.9")
+    raise SystemExit
+destination = next(arg.split("=", 1)[1] for arg in sys.argv if arg.startswith("--pskcrack="))
+with open(destination, "w", encoding="ascii") as artifact:
+    artifact.write("{_PSKCRACK_LINE}\\n")
+print("Aggressive Mode Handshake returned KeyExchange(x) Nonce(x) ID(Type=x)")''',
+    )
+
+    result = IkeScanAdapter(binary).run(_source(mode="ikev1_aggressive"), timeout_seconds=1)
+
+    by_type = {record.evidence_type: record for record in result.evidence}
+    exposed = by_type["ike.psk_hash_exposed"]
+    assert exposed.protocol_version == "IKEv1"
+    assert exposed.probe_result is None
+    mode = by_type["ike.mode.responded"]
+    assert mode.probe_result is not None
+    assert mode.probe_result.command.redacted
+    assert "--pskcrack=<private-temp>" in mode.probe_result.command.args
+    serialized = " ".join(mode.probe_result.command.args)
+    assert _PSKCRACK_LINE not in serialized
+    assert str(tmp_path) not in serialized
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "",
+        "01:02:03:04:05:06:07:08",
+        "01:02:03:04:05:06:07:08:xyz",
+        "01:02:03:04:05:06:07:08:9",
+        "01:02:03:04:05:06:07:08:09:0a",
+        "01:02:03:04:05:06:07:08:09\n01:02:03:04:05:06:07:08:09",
+    ],
+)
+def test_pskcrack_artifact_rejects_incomplete_or_malformed_content(
+    tmp_path: Path, content: str
+) -> None:
+    path = tmp_path / "ike.psk"
+    path.write_text(content, encoding="ascii")
+
+    assert not is_pskcrack_artifact(path)
+
+
+def test_pskcrack_destination_is_private_and_run_scoped() -> None:
+    with temporary_pskcrack_path(enabled=True) as path:
+        assert path is not None
+        if os.name != "nt":
+            assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+            assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        retained = path
+
+    assert not retained.exists()
+    assert not retained.parent.exists()
+
+
+def test_disabled_or_oversized_pskcrack_artifact_is_rejected(tmp_path: Path) -> None:
+    with temporary_pskcrack_path(enabled=False) as path:
+        assert path is None
+
+    missing = tmp_path / "missing.psk"
+    oversized = tmp_path / "oversized.psk"
+    oversized.write_bytes(b"00" * (64 * 1024))
+    assert not is_pskcrack_artifact(missing)
+    assert not is_pskcrack_artifact(oversized)
+
+
+def test_pskcrack_artifact_rejects_read_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A disappearing or unreadable private artifact is not an exposure claim."""
+    path = tmp_path / "ike.psk"
+    path.write_bytes(b"00")
+
+    def raise_read_error(*args: object, **kwargs: object) -> object:
+        raise OSError("simulated read failure")
+
+    monkeypatch.setattr(Path, "open", raise_read_error)
+    assert not is_pskcrack_artifact(path)
+
+
 def test_adapter_marks_zero_responder_identity_not_testable(tmp_path: Path) -> None:
     """Do not project a reflected initiator packet as responder findings (#766)."""
     reflected = (_FIXTURES / "ike_scan_1_9_5_loopback_ikev2.txt").read_text()
     binary = _tool(
         tmp_path,
-        f"""if "--version" in sys.argv:
-    print("ike-scan 1.9.5")
+        f"""if \"--version\" in sys.argv:
+    print(\"ike-scan 1.9.5\")
     raise SystemExit
 print({reflected!r})""",
     )
@@ -227,12 +316,16 @@ def test_response_evidence_covers_rejection_silence_and_identity() -> None:
         "ike.notify",
     ]
     silent = ParsedIKEResponse(mode=IKEMode.IKEV1_MAIN, status=IKEParseStatus.NO_RESPONSE)
-    assert (
-        _response_evidence(
-            silent, asset_id="asset-1", source="fixture", probe_result=_probe(), nat_t=False
-        )[0].observation_type
-        is ObservationType.NO_RESPONSE
+    silent_records = _response_evidence(
+        silent,
+        asset_id="asset-1",
+        source="fixture",
+        probe_result=_probe(),
+        nat_t=False,
+        psk_hash_exposed=True,
     )
+    assert silent_records[0].observation_type is ObservationType.NO_RESPONSE
+    assert len(silent_records) == 1
     identity = ParsedIKEResponse(
         mode=IKEMode.IKEV1_AGGRESSIVE,
         status=IKEParseStatus.RESPONDED,

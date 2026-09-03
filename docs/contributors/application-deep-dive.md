@@ -349,7 +349,9 @@ double-counting successful NAT-T and direct passes.
 `IkeScanAdapter` resolves and versions stock `ike-scan`, executes an argument
 vector under time and output bounds, and parses its untrusted text. The parser
 normalizes responder modes, transform algorithms, numeric group identifiers,
-NOTIFY responses, and Aggressive Mode identity exposure into `Evidence`.
+NOTIFY responses, and Aggressive Mode identity or PSK-hash exposure into `Evidence`.
+The PSK-hash check uses a private run-scoped file that is deleted before the
+adapter returns; only the exposure fact enters `ScanResult`.
 `classify_ike` then creates findings; the common rollup and output fan-out are the
 same ones used by TLS and SSH.
 

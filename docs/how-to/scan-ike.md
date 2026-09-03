@@ -80,8 +80,8 @@ Use `--output-dir` when the four projections must share the same scan and eviden
 ## 5. Interpret the result
 
 Stock `ike-scan` observations have low confidence. QuReddy may report responder presence, Historic
-IKEv1, Aggressive Mode identity exposure, weak transforms, classical KE methods, and an explicit
-NOTIFY rejection. Silence remains unknown.
+IKEv1, Aggressive Mode identity or PSK-hash exposure, weak transforms, classical KE methods, and
+an explicit NOTIFY rejection. PSK-hash values are omitted. Silence remains unknown.
 
 The backend does not prove a bound accepted proposal, peer authentication, IKE_AUTH, Child-SA,
 ESP/AH, tunnel establishment, RFC 9370 additional key exchange completion, favorable post-quantum
@@ -107,6 +107,7 @@ responder explicitly when it is not listening on loopback:
 ```bash
 export QUREDDY_IKE_LIVE_TARGET="192.0.2.10"
 export QUREDDY_IKE_SCAN="/absolute/path/to/ike-scan"
+export QUREDDY_IKE_PSK_TARGET="127.0.0.1:4500"
 just test-ike-live
 ```
 
