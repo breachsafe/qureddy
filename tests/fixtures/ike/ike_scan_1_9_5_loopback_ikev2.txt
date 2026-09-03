@@ -1,0 +1,8 @@
+Starting ike-scan 1.9.5 with 1 hosts (http://www.nta-monitor.com/tools/ike-scan/)
+127.0.0.1	IKEv2 SA_INIT Handshake returned
+	HDR=(CKY-R=0000000000000000, IKEv2, flags=0x08)
+	SA=(Encr=AES_CBC,KeyLength=256 Encr=AES_CBC,KeyLength=128 Encr=3DES Encr=DES Prf=HMAC_SHA1 Prf=HMAC_MD5 Integ=HMAC_SHA1_96 Integ=HMAC_MD5_96 DH_Group=2:modp1024 DH_Group=5:modp1536 DH_Group=14:modp2048)
+	KeyExchange(132 bytes)
+	Nonce(20 bytes)
+
+Ending ike-scan 1.9.5: 1 hosts scanned in 0.005 seconds (216.45 hosts/sec).  1 returned handshake; 0 returned notify

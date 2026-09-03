@@ -1,0 +1,5 @@
+Starting ike-scan 1.9.5 with 1 hosts (http://www.nta-monitor.com/tools/ike-scan/)
+127.0.0.1	Main Mode Handshake returned
+	HDR=(CKY-R=0000000000000000) (8 transforms)
+
+Ending ike-scan 1.9.5: 1 hosts scanned in 0.005 seconds (191.06 hosts/sec).  1 returned handshake; 0 returned notify

@@ -58,6 +58,10 @@ versions follow [PEP 440](https://peps.python.org/pep-0440/).
 
 - Track the current OpenSSL 3.5 LTS security patch in reproducible container and CI builds.
 - Include the isolated legacy OpenSSL helper in the release image for explicit legacy evidence collection.
+- Reject `ike-scan` handshakes with an all-zero responder cookie or SPI as unbound
+  evidence, preventing loopback self-reflection from producing false IKE transform and
+  identity findings
+  ([issue #766](https://github.com/BreachSAFE/qureddy/issues/766)).
 
 ## [0.9.8] - 2026-09-02
 

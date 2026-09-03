@@ -24,6 +24,8 @@ from qureddy.scanners.ike.execution import ProcessOutput
 from qureddy.scanners.ike.parser import ParsedIKEResponse
 from qureddy.scanners.ike.types import IKEMode, IKEParseStatus
 
+_FIXTURES = Path(__file__).parent / "fixtures" / "ike"
+
 
 def _tool(tmp_path: Path, body: str) -> str:
     """Create a real executable child process for an adapter integration test."""
@@ -83,6 +85,26 @@ print("Handshake returned (1 transforms) Encr=AES KeyLength=256 Prf=SHA2 Integ=H
         "ike.integrity",
         "ike.dh_group",
     }
+
+
+def test_adapter_marks_zero_responder_identity_not_testable(tmp_path: Path) -> None:
+    """Do not project a reflected initiator packet as responder findings (#766)."""
+    reflected = (_FIXTURES / "ike_scan_1_9_5_loopback_ikev2.txt").read_text()
+    binary = _tool(
+        tmp_path,
+        f"""if "--version" in sys.argv:
+    print("ike-scan 1.9.5")
+    raise SystemExit
+print({reflected!r})""",
+    )
+
+    result = IkeScanAdapter(binary).run(_source(), timeout_seconds=1)
+
+    assert result.failure is None
+    assert len(result.evidence) == 1
+    assert result.evidence[0].evidence_type == "ike.mode.unbound"
+    assert result.evidence[0].observation_type is ObservationType.NOT_TESTABLE
+    assert result.evidence[0].failure_category is FailureCategory.IKE_OUTPUT_MALFORMED
 
 
 @pytest.mark.parametrize(
