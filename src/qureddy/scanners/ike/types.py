@@ -20,4 +20,5 @@ class IKEParseStatus(StrEnum):
 
     RESPONDED = "responded"
     REJECTED = "rejected"
+    UNBOUND = "unbound"
     NO_RESPONSE = "no_response"

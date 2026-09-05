@@ -129,7 +129,7 @@ The generated table shows both Python member names and serialized values.
 | `HndlExposure` | `core.vocabulary` | `PROTECTED = "protected"`, `PROTECTED_DEFEASIBLE = "protected_defeasible"`, `AT_RISK = "at_risk"`, `UNKNOWN = "unknown"` |
 | `HygieneStatus` | `core.vocabulary` | `OK = "ok"`, `ACTION_NEEDED = "action_needed"`, `WEAK = "weak"`, `UNKNOWN = "unknown"` |
 | `IKEMode` | `scanners.ike.types` | `IKEV1_MAIN = "ikev1_main"`, `IKEV1_AGGRESSIVE = "ikev1_aggressive"`, `IKEV2 = "ikev2"` |
-| `IKEParseStatus` | `scanners.ike.types` | `RESPONDED = "responded"`, `REJECTED = "rejected"`, `NO_RESPONSE = "no_response"` |
+| `IKEParseStatus` | `scanners.ike.types` | `RESPONDED = "responded"`, `REJECTED = "rejected"`, `UNBOUND = "unbound"`, `NO_RESPONSE = "no_response"` |
 | `LaunchStatus` | `scanners.tls.openssl_probe.executor` | `OK = "ok"`, `MISSING = "missing"`, `UNLAUNCHABLE = "unlaunchable"` |
 | `MatchStatus` | `core.crypto_catalog.models` | `EXACT = "exact"`, `FAMILY_ONLY = "family_only"`, `UNKNOWN = "unknown"` |
 | `ObservationType` | `core.vocabulary` | `NEGOTIATED = "negotiated"`, `OFFERED = "offered"`, `OBSERVED = "observed"`, `INFERRED = "inferred"`, `NOT_OFFERED = "not_offered"`, `NOT_TESTABLE = "not_testable"`, `NO_RESPONSE = "no_response"` |

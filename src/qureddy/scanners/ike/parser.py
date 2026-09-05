@@ -36,6 +36,10 @@ _KEY_LENGTH = re.compile(r"(?:^|[,\s]+)KeyLength=(\d+)")
 _PRF = re.compile(r"(?:Prf|Hash)=([A-Za-z0-9_.+\-]+)")
 _INTEGRITY = re.compile(r"Integ=([A-Za-z0-9_.+\-]+)")
 _TRANSFORM_COUNT = re.compile(r"\((\d+) transforms?\)", re.IGNORECASE)
+_ZERO_RESPONDER_COOKIE = re.compile(r"\bCKY-R\s*=\s*0{16}\b", re.IGNORECASE)
+_ZERO_RESPONDER_SPI = re.compile(r"\bSPIr\s*=\s*0{16}\b", re.IGNORECASE)
+_IKEV2_FLAGS = re.compile(r"\bflags\s*=\s*0x([0-9a-f]{2})\b", re.IGNORECASE)
+_IKEV2_RESPONSE_FLAG = 0x20
 _NOTIFY_PATTERNS = (
     re.compile(r"Notify[^\n(]*\(([A-Z][A-Z0-9_-]{2,})\)", re.IGNORECASE),
     re.compile(r"Notify=([A-Z][A-Z0-9_-]{2,})", re.IGNORECASE),
@@ -74,6 +78,21 @@ def _notify_name(text: str) -> str | None:
     return None
 
 
+def _is_unbound_response(mode: IKEMode, text: str) -> bool:
+    """Reject headers that cannot identify a protocol response."""
+    if (
+        _ZERO_RESPONDER_COOKIE.search(text) is not None
+        or _ZERO_RESPONDER_SPI.search(text) is not None
+    ):
+        return True
+    flags = _IKEV2_FLAGS.search(text)
+    return (
+        mode is IKEMode.IKEV2
+        and flags is not None
+        and int(flags.group(1), 16) & _IKEV2_RESPONSE_FLAG == 0
+    )
+
+
 def parse_ike_scan_output(
     mode: IKEMode,
     *,
@@ -92,6 +111,11 @@ def parse_ike_scan_output(
         return ParsedIKEResponse(
             mode=mode,
             status=IKEParseStatus.NO_RESPONSE,
+        )
+    if _is_unbound_response(mode, text):
+        return ParsedIKEResponse(
+            mode=mode,
+            status=IKEParseStatus.UNBOUND,
         )
     count = _TRANSFORM_COUNT.search(text)
     identity_exposed = mode is IKEMode.IKEV1_AGGRESSIVE and all(

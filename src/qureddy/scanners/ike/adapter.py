@@ -156,8 +156,9 @@ class IkeScanAdapter:
         binary = self._require_binary()
         argv = self._argv(mode, host=host, port=port, nat_t=nat_t, timeout=timeout)
         output = run_bounded(argv, timeout_seconds=timeout + 2, output_limit=self._output_limit)
-        category = _output_failure_category(output)
         text = f"{_decode(output.stdout)}\n{_decode(output.stderr)}"
+        response = _process_response(mode, output=output, text=text)
+        category = _output_failure_category(output, response=response)
         probe_result = ProbeResult(
             command=ProbeCommand(
                 executable=binary,
@@ -171,7 +172,6 @@ class IkeScanAdapter:
             duration_ms=output.duration_ms,
             failure_category=category,
         )
-        response = _process_response(mode, output=output, text=text)
         _LOG.debug(
             "ike_scan.completed",
             mode=mode.value,
@@ -223,7 +223,9 @@ class IkeScanAdapter:
         )
 
 
-def _output_failure_category(output: ProcessOutput) -> FailureCategory | None:
+def _output_failure_category(
+    output: ProcessOutput, *, response: ParsedIKEResponse | None = None
+) -> FailureCategory | None:
     """Map bounded process state onto the stable scan failure vocabulary."""
     if output.timed_out:
         return FailureCategory.IKE_PROBE_TIMEOUT
@@ -231,6 +233,8 @@ def _output_failure_category(output: ProcessOutput) -> FailureCategory | None:
         return FailureCategory.IKE_OUTPUT_LIMIT
     if output.return_code != 0:
         return FailureCategory.LOCAL_IKE_SCAN_BROKEN
+    if response is not None and response.status is IKEParseStatus.UNBOUND:
+        return FailureCategory.IKE_OUTPUT_MALFORMED
     return None
 
 
