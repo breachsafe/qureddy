@@ -39,6 +39,13 @@ versions follow [PEP 440](https://peps.python.org/pep-0440/).
 
 ## Unreleased
 
+### Fixed
+
+- Preserve observed but unrated cipher suites in CBOM output with an explicit
+  `unknown` primitive and without a guessed classical strength
+  ([issue #821](https://github.com/BreachSAFE/qureddy/issues/821),
+  [PR #826](https://github.com/BreachSAFE/qureddy/pull/826)).
+
 ## [0.9.13] - 2026-09-06
 
 ### Changed

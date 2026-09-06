@@ -10,7 +10,7 @@ Process and engineering standards for people changing QuReddy. Separate from the
 ## Documents
 
 1. [QuReddy application deep dive](application-deep-dive.md)
-2. [Coding rules](coding-rules.md)
+2. [Coding rules](coding-rules.md): canonical commenting and docstring contract
 3. [CLI design rules](cli-design-rules.md)
 4. [OSS standards](oss-standards.md)
 5. [Code examples: good vs bad](examples.md)

@@ -6,6 +6,27 @@ The algorithm/cipher-suite/protocol/certificate cryptographic-asset
 components QuReddy positively observed, plus their classification profiles.
 Split out of ``cbom.py`` to keep that module under the file-size ceiling;
 the rendered CBOM is unchanged (#171).
+
+Projection preserves observation before classification:
+
+    ScanResult evidence
+    ├── cipher suite → ciphers.py → AlgorithmProperties
+    │   ├── known strength  → classicalSecurityLevel
+    │   ├── known primitive  → primitive
+    │   └── unknown suite   → component retained, strength omitted,
+    │                         primitive = unknown
+    ├── key exchange → key-exchange classifier → AlgorithmProperties
+    └── signature    → signature classifier → AlgorithmProperties
+
+CBOM outputs:
+
+    cipher classification
+    ├── AlgorithmProperties.primitive
+    ├── AlgorithmProperties.classicalSecurityLevel, when sourced
+    └── legacy weak finding/component verdict, when a marker matches
+
+Unknown cipher classification remains a CBOM component. Unrated strength leaves
+`classicalSecurityLevel` absent. This adapter owns projection; ciphers.py owns classification.
 """
 
 from __future__ import annotations

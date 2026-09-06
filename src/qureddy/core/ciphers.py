@@ -3,49 +3,58 @@
 """Bulk-cipher strength and CycloneDX primitive, resolved from the suite name (#315).
 
 `cipher_classical_bits()` returns security strength per SP 800-57, so export
-caps and 3DES resolve below the key their name implies. `has_weak_cipher()` is
-the prohibition signal and is independent of strength: RC4 returns 128 and is
-banned. Consumers that rank or filter need both.
+caps and 3DES resolve below the key their name implies. `has_weak_cipher()`
+detects reviewed weak-acceptance markers independently of strength: RC4 returns
+128 and still matches a weak marker. Consumers that rank or filter need both.
 
 Matching is substring-based over the suite name, so resolution order is
 significant. An export prefix has to resolve before the cipher it names, and
 3DES before the "des" inside it. The three tables below encode that order;
 `WEAK_CIPHER_MARKERS` is order-independent.
 
-`cipher_classical_bits()` returns None when this transitional table has no sourced
-rating. GOST is the remaining known unrated family in the current runtime corpus;
-future names also take this path until the reviewed registry is authoritative (#821).
-The CBOM must retain those observations and mark their primitive `unknown`.
+`cipher_classical_bits()` returns None when this table has no sourced rating. GOST
+is currently unrated; future names take the same path until the registry is reviewed
+(#821). The CBOM retains the observation and marks its primitive `unknown`.
 
-One axis of four, and where each return value lands. CBOM callers reach the
-first two through the cbom_cipher adapter, which maps the primitive string to
-the CycloneDX enum. Scanner callers import from here directly.
+This module classifies cipher families. CBOM adapters reuse its strength and primitive;
+legacy findings and SSH classification reuse its primitive. Weak-marker matching is a
+separate verdict.
 
-      ECDHE   -   RSA   -   AES128GCM   -   SHA256
-        |          |            |               |
-       kx         sig      this module      unmodelled
-        |          |            |
-        |          |            +-> cipher_classical_bits()
-        |          |            |     cbom_cipher:13  re-export, value unchanged
-        |          |            |       cbom_legacy:42      None passes through
-        |          |            |       cbom_components:97  None DROPS the component
-        |          |            |                           (TLS 1.3 AEAD path only)
-        |          |            |     cbom_cipher:33  shared AlgorithmProperties
-        |          |            +-> cipher_primitive()
-        |          |            |     cbom_cipher:14  str -> CryptoPrimitive enum
-        |          |            |     _legacy_findings:122, ssh_algorithms:143  direct
-        |          |            +-> has_weak_cipher()
-        |          |                  cbom_legacy:54        component verdict
-        |          |                  _legacy_findings:167  scan finding
-        |          +-> cbom_components:151  signature_algorithm_properties
-        +-> cbom_components:131  key_exchange_algorithm_properties
+Four protocol axes:
 
-Forward secrecy, AEAD status, and `nistQuantumSecurityLevel` have no owner yet.
+    observation
+    ├── 1/4 key exchange  → key-exchange adapter (owned elsewhere)
+    ├── 2/4 signature     → signature adapter (owned elsewhere)
+    ├── 3/4 cipher suite  → this module: strength, primitive, weak verdict
+    └── 4/4 digest/hash   → no owner in this module
 
-Both return values are schema-constrained. `classicalSecurityLevel` is
-`{"type": "integer", "minimum": 0}`, which is why NULL rates 0 and an unrated
-cipher is omitted instead of zeroed. The `primitive` enum has no member for
-"encrypts nothing", so NULL maps to `other`.
+The cipher axis has independent outputs. A cipher may have sourced strength, an
+`unknown` primitive, and a weak verdict simultaneously.
+
+CBOM projection:
+
+    cipher observation
+    ├── cipher_classical_bits() → cbom_cipher adapter → classicalSecurityLevel
+    ├── cipher_primitive()      → cbom_cipher adapter → primitive
+    ├── has_weak_cipher()       → legacy finding and legacy CBOM component verdict
+    └── unrated suite           → component retained, strength omitted,
+                                  primitive = `unknown`
+
+Function path:
+
+    cipher name
+    ├── _sized_family_bits()    → encoded key size
+    ├── _first_marker_bits()    → first ordered family match
+    ├── cipher_classical_bits() → sourced strength or None
+    ├── cipher_primitive()      → primitive or unknown
+    └── has_weak_cipher()       → weak-acceptance-marker verdict
+
+Forward secrecy, AEAD status, and `nistQuantumSecurityLevel` are outside this module.
+
+These outputs are schema-constrained. `classicalSecurityLevel` is
+`{"type": "integer", "minimum": 0}`. NULL receives 0. An unrated suite leaves
+`classicalSecurityLevel` absent. The `primitive` enum has no member for "encrypts
+nothing", so NULL maps to `other`.
 
     SP 800-57 Pt 1 Rev 5  https://doi.org/10.6028/NIST.SP.800-57pt1r5
     RFC 7465 s2           https://www.rfc-editor.org/rfc/rfc7465#section-2
@@ -70,10 +79,11 @@ WEAK_CIPHER_MARKERS: tuple[str, ...] = (
 
 
 def _sized_family_bits(lowered: str, family: str) -> int | None:
-    """Return a name-encoded size, or None when the syntax is not recognized.
+    """Resolve a supported family-size spelling from a normalized suite name.
 
-    Only the spellings already used by the supported cipher inventories are accepted.
-    This deliberately does not guess a size from an arbitrary digit in a future name.
+    Only spellings used by the supported cipher inventories are accepted. The helper
+    returns ``None`` for an unrecognized spelling; callers then continue to the next
+    reviewed rule. It never guesses a size from an arbitrary digit in a future name.
     """
     for size in (256, 192, 128):
         if (
@@ -119,10 +129,11 @@ _PRIMITIVE_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 
 
 def _first_marker_bits(lowered: str, rules: tuple[tuple[tuple[str, ...], int], ...]) -> int | None:
-    """Return the first ordered rule match; rule order is part of the policy.
+    """Return the first ordered rule match, preserving classification precedence.
 
     Export and 3DES names contain ordinary cipher markers, so callers place their
-    disambiguating rules before generic family rules.
+    disambiguating rules before generic family rules. ``None`` means no rule in the
+    supplied table has a sourced rating.
     """
     for markers, bits in rules:
         if any(marker in lowered for marker in markers):
@@ -131,11 +142,12 @@ def _first_marker_bits(lowered: str, rules: tuple[tuple[tuple[str, ...], int], .
 
 
 def cipher_classical_bits(name: str) -> int | None:
-    """Return sourced classical strength in bits, or None without a valid mapping.
+    """Return sourced classical strength in bits, or ``None`` without a mapping.
 
-    None is an evidence state, not permission to discard the observed algorithm.
-    Callers that emit CBOM assets must preserve the asset and leave its strength
-    absent rather than converting uncertainty to zero or a guessed value.
+    ``None`` records an observed algorithm with no reviewed strength. CBOM callers
+    preserve the component and omit ``classicalSecurityLevel``; they do not convert
+    uncertainty into zero or a guessed value. Rule order handles export and 3DES
+    names before their generic markers.
     """
     lowered = name.lower()
     bits = _first_marker_bits(lowered, _PRE_FAMILY_BITS)
@@ -149,10 +161,11 @@ def cipher_classical_bits(name: str) -> int | None:
 
 
 def cipher_primitive(name: str) -> str:
-    """Return the protocol-neutral primitive, or ``unknown`` without a safe mapping.
+    """Return the protocol-neutral primitive, or ``unknown`` without a mapping.
 
-    This is intentionally conservative: a name that is not recognized by the
-    transitional family table must not be presented as a block cipher by default.
+    The result is consumed by the CycloneDX adapter and SSH classification. An
+    unrecognized name remains ``unknown`` so downstream CBOM output cannot imply a
+    cipher family that this table did not establish.
     """
     lowered = name.lower()
     # A NULL suite encrypts nothing, so no cipher primitive describes it. The
@@ -168,7 +181,12 @@ def cipher_primitive(name: str) -> str:
 
 
 def has_weak_cipher(accepted_ciphers: tuple[str, ...]) -> bool:
-    """Return whether any accepted cipher matches a known-weak marker."""
+    """Return whether accepted suite names contain a reviewed weak marker.
+
+    This is an acceptance verdict separate from strength and primitive classification.
+    A suite can have numeric strength and still return ``True``. The caller owns the
+    policy response and finding text; this helper only matches the reviewed markers.
+    """
     return any(
         marker in cipher.upper() for cipher in accepted_ciphers for marker in WEAK_CIPHER_MARKERS
     )

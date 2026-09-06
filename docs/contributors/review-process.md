@@ -17,6 +17,7 @@ For *why* the project uses three label tiers (Reviewer / Arbiter / Decision), se
 5. [Filterable views](#5-filterable-views)
 6. [Hard rules](#6-hard-rules)
 7. [When the apparatus doesn't apply](#7-when-the-apparatus-doesnt-apply)
+8. [Comment review](#8-comment-review)
 
 ## 1. The pipeline
 
@@ -171,6 +172,16 @@ These come from the reviewer and validator skills:
 - **CI/dependency bumps** from Dependabot follow GitHub's standard auto-merge rules, not this apparatus.
 
 For everything else — bug fixes, feature work, architecture changes — the full pipeline applies.
+
+## 8. Comment review
+
+Reviewers apply the canonical [commenting and docstring contract](coding-rules.md#section-10--comments-and-docstrings)
+to changed code. A comment is reviewable context. It should explain
+durable rationale, invariants, ownership boundaries, failure semantics, security or
+provenance constraints, compatibility limits, transition context, or test intent.
+If the code is self-explanatory and none of those facts needs preserving, do not add
+a comment. For every new or modified source file, check code, diagram, and comments as
+one contract. Flag stale, speculative, line-number-dependent, or code-restating text.
 
 ### On enforcement
 
