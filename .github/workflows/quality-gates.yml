@@ -71,8 +71,25 @@ jobs:
           merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")" || {
             echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; }
           changed="$(git diff --name-only "$merge_base" "$HEAD_SHA")"
-          printf '%s\n' "$changed"
-          if printf '%s\n' "$changed" | grep -qE '^(src/|tests/|scripts/|\.github/|LICENSES/|pyproject\.toml$|uv\.lock$|Dockerfile)'; then
+          echo "$changed"
+          # A deny-list, not an allow-list, so the failure direction is "run the
+          # gates". An allow-list of code paths silently skips on any file it does
+          # not know about: Justfile, REUSE.toml, .jscpd.json, .gitignore and
+          # .python-version all change CI behaviour and none of them looks like
+          # source. Only a diff where EVERY file is documentation skips.
+          # LICENSES/ is deliberately absent: a licence change must still run
+          # reuse lint.
+          if [ -z "$changed" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Count non-documentation files rather than using `grep -vq`. On BSD grep
+          # `-v -q` reports whether the PATTERN matched, not whether any line was
+          # output, so a mixed docs+code diff exits 1 and would skip every gate.
+          # Counting is unambiguous on both greps. `|| true` because grep exits 1
+          # on a zero count and this script runs under `set -e`.
+          non_doc="$(echo "$changed" | grep -cvE '(^|/)[^/]+\.md$|^docs/|^\.github/ISSUE_TEMPLATE/' || true)"
+          if [ "${non_doc:-1}" -gt 0 ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "documentation-only diff; heavy jobs will skip"
