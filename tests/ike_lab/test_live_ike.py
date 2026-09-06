@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 from typer.testing import CliRunner
@@ -23,12 +24,23 @@ from qureddy.scanners.ike.scanner import IKEScanner
 from qureddy.scanners.ike.types import IKEMode, IKEParseStatus
 
 
+def _unmet(reason: str) -> NoReturn:
+    """Report an absent lab precondition as skipped, not failed (#740).
+
+    ``QUREDDY_IKE_LAB_REQUIRED=1`` turns the skip back into a failure, so a
+    configured lab cannot pass by quietly skipping the suite it exists to run.
+    """
+    if os.environ.get("QUREDDY_IKE_LAB_REQUIRED") == "1":
+        pytest.fail(f"{reason} (QUREDDY_IKE_LAB_REQUIRED=1)")
+    pytest.skip(reason)
+
+
 def _ike_scan_path() -> str:
     """Require the real stock executable used by the product boundary."""
     configured = os.environ.get("QUREDDY_IKE_SCAN")
     resolved = shutil.which(configured or "ike-scan")
     if resolved is None:
-        pytest.fail("real ike-scan executable is required for live IKE acceptance tests")
+        _unmet("real ike-scan executable is required for live IKE acceptance tests")
     return resolved
 
 
@@ -38,14 +50,34 @@ def _target() -> str:
 
 
 @pytest.fixture(scope="module")
-def live_result() -> ScanResult:
+def live_responder() -> None:
+    """Require an authorized responder, not just a reflected packet (#740).
+
+    ``ike-scan`` against loopback on matching source and destination ports gets
+    its own request back when nothing is bound to UDP/500, so tool presence does
+    not prove a responder exists. UDP/500 is privileged, which rules out a bind
+    probe, so the check is the product's own classification: an unbound header
+    yields no ``ike.mode.responded`` evidence.
+    """
+    scanner = IKEScanner(IkeScanAdapter(_ike_scan_path()))
+    result = scanner.scan(parse_ike_target(_target()), timeout_seconds=2)
+    if any(record.evidence_type == "ike.mode.responded" for record in result.evidence):
+        return
+    _unmet(
+        f"no authorized IKE responder answered {_target()}:500 "
+        f"(scan status {result.scan.status}); start the lab responder to run this suite"
+    )
+
+
+@pytest.fixture(scope="module")
+def live_result(live_responder: None) -> ScanResult:
     """Run the production scanner once against the real responder."""
     scanner = IKEScanner(IkeScanAdapter(_ike_scan_path()), nat_t=True)
     return scanner.scan(parse_ike_target(_target()), timeout_seconds=2)
 
 
 @pytest.fixture(scope="module")
-def direct_live_result() -> ScanResult:
+def direct_live_result(live_responder: None) -> ScanResult:
     """Run direct IKE with the production source-port default."""
     scanner = IKEScanner(IkeScanAdapter(_ike_scan_path()))
     return scanner.scan(parse_ike_target(_target()), timeout_seconds=2)
@@ -151,7 +183,7 @@ def test_live_findings_only_reference_emitted_evidence(live_result: ScanResult) 
     assert all(set(finding.evidence_ids) <= evidence_ids for finding in live_result.findings)
 
 
-def test_real_ikev1_output_preserves_space_form_key_length() -> None:
+def test_real_ikev1_output_preserves_space_form_key_length(live_responder: None) -> None:
     """Parse actual ike-scan IKEv1 multiline output with AES key length (#715)."""
     command = [
         _ike_scan_path(),
@@ -187,7 +219,7 @@ def test_real_ikev1_output_preserves_space_form_key_length() -> None:
     assert cipher_classical_bits(response.encryption[0]) == 256
 
 
-def test_real_cli_writes_every_output_from_one_scan(tmp_path: Path) -> None:
+def test_real_cli_writes_every_output_from_one_scan(live_responder: None, tmp_path: Path) -> None:
     """Exercise Rich, JSON, JSONL, and CBOM through one real CLI scan."""
     result = CliRunner().invoke(
         app,
