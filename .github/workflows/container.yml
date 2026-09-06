@@ -83,7 +83,11 @@ jobs:
           set -euo pipefail
           test "$(docker run --rm --entrypoint sh qureddy-container:smoke -c 'id -u')" = "1000"
           docker run --rm --entrypoint sh qureddy-container:smoke -c \
-            'openssl version | grep -E "^OpenSSL 3\\.5\\." && openssl list -tls1_3 -tls-groups | grep -q X25519MLKEM768'
+            'set -eu
+             /opt/openssl/bin/openssl version | grep -q "^OpenSSL 3\\.5\\.8 "
+             /opt/openssl/bin/openssl list -tls1_3 -tls-groups | grep -q X25519MLKEM768
+             /opt/openssl-legacy/bin/openssl version | grep -q "^OpenSSL 1\\.0\\.2u "
+             /opt/openssl-legacy/bin/openssl ciphers | tr ":" "\\n" | grep -qx RC4-SHA'
           expected="$(docker inspect qureddy-container:smoke \
             --format '{{ index .Config.Labels "io.breachsafe.qureddy.ike-scan.version" }}')"
           actual="$(docker run --rm --entrypoint dpkg-query qureddy-container:smoke \
