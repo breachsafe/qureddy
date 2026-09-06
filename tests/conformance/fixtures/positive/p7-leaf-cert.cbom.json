@@ -226,7 +226,15 @@
           "value": "false"
         }
       ],
-      "type": "cryptographic-asset"
+      "type": "cryptographic-asset",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "tls://github.com:443",
+            "additionalContext": "observation=observed; evidence_type=tls.cert.signature; confidence=high; source=qureddy.scanners.tls.cert_sig"
+          }
+        ]
+      }
     },
     {
       "bom-ref": "crypto/algorithm/ec-256",
@@ -249,7 +257,15 @@
           "value": "low"
         }
       ],
-      "type": "cryptographic-asset"
+      "type": "cryptographic-asset",
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "tls://github.com:443",
+            "additionalContext": "observation=observed; evidence_type=tls.cert.signature; confidence=high; source=qureddy.scanners.tls.cert_sig"
+          }
+        ]
+      }
     },
     {
       "bom-ref": "crypto/algorithm/ecdhe-ecdsa-aes128-gcm-sha256",
@@ -801,7 +817,15 @@
           "name": "qureddy:rule_id",
           "value": "tls.cert.signature_algorithm"
         }
-      ]
+      ],
+      "evidence": {
+        "occurrences": [
+          {
+            "location": "tls://github.com:443",
+            "additionalContext": "observation=observed; evidence_type=tls.cert.signature; confidence=high; source=qureddy.scanners.tls.cert_sig"
+          }
+        ]
+      }
     }
   ],
   "dependencies": [
