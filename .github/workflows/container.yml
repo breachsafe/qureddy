@@ -64,10 +64,10 @@ jobs:
       # so no host `python -m build` prestep is needed.
       - name: Build image
         run: |
-          # Read the publish job's registry cache so a PR reuses layers instead of
-          # rebuilding from the base every time. Read-only and unauthenticated: the
-          # package is public, and a PR from a fork has no ghcr write credential.
-          # `|| true` is deliberate; a cache miss must not fail the gate.
+          # Read the publish job's registry layer cache so a PR reuses layers instead
+          # of rebuilding from the base every time. Read-only and unauthenticated: the
+          # package is public, and a fork PR has no ghcr write credential. A cache miss
+          # is not an error.
           docker buildx build \
             --build-arg "QUREDDY_VERSION=${QUREDDY_VERSION}" \
             --cache-from "type=registry,ref=ghcr.io/breachsafe/qureddy:buildcache-amd64" \

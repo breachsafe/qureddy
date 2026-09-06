@@ -12,31 +12,11 @@ name: CodeQL
 
 on:
   push:
-    paths-ignore:
-      # Documentation-only changes cannot affect these gates. Every one of them
-      # builds the package and runs the suite; none reads a Markdown file.
-      # Safe because this repo has no required-status-check protection, so a
-      # skipped workflow leaves no check pending and blocks no merge.
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSES/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/*.md"
     # Defense-in-depth (#222): scan direct-to-main commits immediately, not
     # only at the next weekly schedule. PRs are covered by the pull_request
     # trigger; this catches admin/direct pushes that bypass a PR.
     branches: [main]
   pull_request:
-    paths-ignore:
-      # Documentation-only changes cannot affect these gates. Every one of them
-      # builds the package and runs the suite; none reads a Markdown file.
-      # Safe because this repo has no required-status-check protection, so a
-      # skipped workflow leaves no check pending and blocks no merge.
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSES/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/*.md"
     branches: [main]
   schedule:
     # Wednesdays 08:00 UTC. Weekly scheduled scan even without PR activity.
@@ -51,7 +31,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
+  # Change detection. `main` protection requires named contexts with strict: true,
+  # so a workflow that never starts leaves them unreported and blocks the merge.
+  # A job that starts and skips reports its context as skipped, which protection
+  # accepts. The workflow always runs; the expensive jobs opt out. Any uncertainty
+  # defaults to running everything.
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the diff
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")" || {
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          changed="$(git diff --name-only "$merge_base" "$HEAD_SHA")"
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -qE '^(src/|tests/|scripts/|\.github/|LICENSES/|pyproject\.toml$|uv\.lock$|Dockerfile)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "documentation-only diff; heavy jobs will skip"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   analyze:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 30

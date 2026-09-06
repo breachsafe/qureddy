@@ -10,16 +10,6 @@ name: CI
 
 on:
   pull_request:
-    paths-ignore:
-      # Documentation-only changes cannot affect these gates. Every one of them
-      # builds the package and runs the suite; none reads a Markdown file.
-      # Safe because this repo has no required-status-check protection, so a
-      # skipped workflow leaves no check pending and blocks no merge.
-      - "**/*.md"
-      - "docs/**"
-      - "LICENSES/**"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/*.md"
     branches: [main]
   workflow_dispatch:
   schedule:
@@ -40,17 +30,70 @@ defaults:
 jobs:
 
   # ===========================================================================
+  # Change detection. Every job below is gated on this instead of a
+  # workflow-level `paths-ignore`.
+  #
+  # `main` protection requires 17 named contexts with strict: true. A workflow
+  # that never STARTS never reports those contexts, so a documentation-only PR
+  # would sit unmergeable forever. A job that starts and then SKIPS reports its
+  # context as skipped, which branch protection accepts. So the workflow always
+  # runs and the expensive jobs opt out.
+  #
+  # Anything that is not documentation is treated as code. The default on any
+  # uncertainty (no base sha, non-PR event, unreadable diff) is to run everything.
+  # ===========================================================================
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the diff
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
+            echo "not a pull request; running everything"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")" || {
+            echo "no merge base; running everything"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          changed="$(git diff --name-only "$merge_base" "$HEAD_SHA")"
+          echo "changed files:"
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -qE '^(src/|tests/|scripts/|\.github/|LICENSES/|pyproject\.toml$|uv\.lock$|Dockerfile)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "documentation-only diff; heavy jobs will skip"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ===========================================================================
   # Phase 1 — Static analysis (no execution).
   # Lint, format-check, type, static security, dep CVEs, license, secrets.
   # ===========================================================================
-  # ubuntu only. Every step here is static analysis: ruff, mypy, bandit,
-  # pip-audit, deptry, reuse, and a git-based provenance check. None reads the
-  # host platform, so a second run on macos-latest returns the same verdict for
-  # twice the runner time. Platform coverage lives in phases 2 to 4, which
-  # execute code and keep the [ubuntu, macos] matrix.
   phase-1-static:
-    name: "Phase 1: Static"
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    name: "Phase 1: Static (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -398,6 +441,8 @@ jobs:
   # editable source tree, to exercise the public console entrypoint.
   # ===========================================================================
   cbom-conformance:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     name: "CBOM: CycloneDX 1.7 final bytes"
     runs-on: ubuntu-latest
 
@@ -445,6 +490,8 @@ jobs:
   # This is the packaging contract (#33), not the release orchestrator (#34).
   # ===========================================================================
   packaging-build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     name: "Package: build and runtime audit"
     runs-on: ubuntu-latest
 
