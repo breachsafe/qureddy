@@ -51,7 +51,7 @@ TRUST BOUNDARY:
 \b
 Stock ike-scan supplies lower-trust discovery evidence. Its IKEv2 sender is
 experimental and sends one default proposal. QuReddy reports transform identifiers,
-Historic IKEv1, weak algorithms, explicit NOTIFY responses, and identity exposure.
+Historic IKEv1, weak algorithms, explicit NOTIFY responses, and Aggressive Mode exposure.
 It does not claim final negotiation, RFC 9370 additional-key-exchange completion,
 favorable post-quantum readiness, or HNDL protection from this backend.
 

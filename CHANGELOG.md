@@ -54,6 +54,11 @@ versions follow [PEP 440](https://peps.python.org/pep-0440/).
   Container builds now reuse a registry layer cache
   ([PR #803](https://github.com/BreachSAFE/qureddy/pull/803)).
 
+### Added
+
+- Report IKEv1 Aggressive Mode PSK-hash exposure without including the values in scan output
+  ([issue #763](https://github.com/BreachSAFE/qureddy/issues/763)).
+
 ## [0.9.10] - 2026-09-06
 
 ### Fixed

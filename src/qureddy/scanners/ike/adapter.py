@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 from functools import cached_property
+from pathlib import Path
 from urllib.parse import urlparse
 
 from qureddy.core.contracts import (
@@ -17,19 +18,17 @@ from qureddy.core.contracts import (
     ScanSource,
     SourceKind,
 )
-from qureddy.core.ids import new_id
 from qureddy.core.logging import get_logger
 from qureddy.core.models import (
-    Confidence,
-    Evidence,
     ExternalToolDependency,
     FailureCategory,
-    ObservationType,
     ProbeCommand,
     ProbeResult,
 )
+from qureddy.scanners.ike.evidence import response_evidence as _response_evidence
 from qureddy.scanners.ike.execution import ProcessOutput, run_bounded
 from qureddy.scanners.ike.parser import ParsedIKEResponse, parse_ike_scan_output
+from qureddy.scanners.ike.psk import is_pskcrack_artifact, temporary_pskcrack_path
 from qureddy.scanners.ike.types import IKEMode, IKEParseStatus
 
 _LOG = get_logger(__name__)
@@ -123,7 +122,7 @@ class IkeScanAdapter:
         if host is None or port is None:
             return self._failure(CollectionFailureKind.MALFORMED, "IKE source has no endpoint")
         try:
-            response, probe_result, output = self._invoke(
+            response, probe_result, output, psk_hash_exposed = self._invoke(
                 mode, host=host, port=port, nat_t=nat_t, timeout=timeout_seconds
             )
         except OSError as exc:
@@ -135,6 +134,7 @@ class IkeScanAdapter:
                 source=self._source_name,
                 probe_result=probe_result,
                 nat_t=nat_t,
+                psk_hash_exposed=psk_hash_exposed,
             )
         )
         failure = _process_failure(output)
@@ -151,19 +151,28 @@ class IkeScanAdapter:
 
     def _invoke(
         self, mode: IKEMode, *, host: str, port: int, nat_t: bool, timeout: int
-    ) -> tuple[ParsedIKEResponse, ProbeResult, ProcessOutput]:
+    ) -> tuple[ParsedIKEResponse, ProbeResult, ProcessOutput, bool]:
         """Execute and parse one bounded mode probe."""
         binary = self._require_binary()
-        argv = self._argv(mode, host=host, port=port, nat_t=nat_t, timeout=timeout)
-        output = run_bounded(argv, timeout_seconds=timeout + 2, output_limit=self._output_limit)
+        with temporary_pskcrack_path(enabled=mode is IKEMode.IKEV1_AGGRESSIVE) as psk_path:
+            argv = self._argv(
+                mode, host=host, port=port, nat_t=nat_t, timeout=timeout, psk_path=psk_path
+            )
+            output = run_bounded(argv, timeout_seconds=timeout + 2, output_limit=self._output_limit)
+            psk_hash_exposed = psk_path is not None and is_pskcrack_artifact(psk_path)
         text = f"{_decode(output.stdout)}\n{_decode(output.stderr)}"
+        command_args = tuple(
+            "--pskcrack=<private-temp>" if arg.startswith("--pskcrack=") else arg
+            for arg in argv[1:]
+        )
         response = _process_response(mode, output=output, text=text)
         category = _output_failure_category(output, response=response)
         probe_result = ProbeResult(
             command=ProbeCommand(
                 executable=binary,
-                args=tuple(argv[1:]),
+                args=command_args,
                 timeout_seconds=timeout + 2,
+                redacted=psk_path is not None,
             ),
             return_code=output.return_code,
             stdout_sha256=_digest(output.stdout),
@@ -180,10 +189,20 @@ class IkeScanAdapter:
             status=response.status.value,
             stdout_bytes=len(output.stdout),
             stderr_bytes=len(output.stderr),
+            psk_hash_exposed=psk_hash_exposed,
         )
-        return response, probe_result, output
+        return response, probe_result, output, psk_hash_exposed
 
-    def _argv(self, mode: IKEMode, *, host: str, port: int, nat_t: bool, timeout: int) -> list[str]:
+    def _argv(
+        self,
+        mode: IKEMode,
+        *,
+        host: str,
+        port: int,
+        nat_t: bool,
+        timeout: int,
+        psk_path: Path | None = None,
+    ) -> list[str]:
         """Build one list-form invocation with explicit transport settings."""
         binary = self._require_binary()
         retry_window = sum(_DEFAULT_BACKOFF**attempt for attempt in range(self._retry))
@@ -203,6 +222,8 @@ class IkeScanAdapter:
         argv.extend(("--sport", str(source_port), "--dport", str(port), "--multiline"))
         if mode is IKEMode.IKEV1_AGGRESSIVE:
             argv.append("--aggressive")
+            if psk_path is not None:
+                argv.append(f"--pskcrack={psk_path}")
         elif mode is IKEMode.IKEV2:
             argv.append("--ikev2")
         argv.append(host)
@@ -260,133 +281,3 @@ def _process_failure(output: ProcessOutput) -> CollectionFailure | None:
             message="ike-scan exited nonzero",
         )
     return None
-
-
-def _mode_evidence(
-    response: ParsedIKEResponse,
-    *,
-    asset_id: str,
-    source: str,
-    probe_result: ProbeResult,
-    nat_t: bool,
-) -> Evidence:
-    """Build the one mode-level record for a parsed responder state."""
-    if probe_result.failure_category is not None:
-        observation = ObservationType.NOT_TESTABLE
-    elif response.status is IKEParseStatus.NO_RESPONSE:
-        observation = ObservationType.NO_RESPONSE
-    else:
-        observation = ObservationType.OBSERVED
-    return Evidence(
-        id=new_id("ev"),
-        asset_id=asset_id,
-        evidence_type=f"ike.mode.{response.status.value}",
-        observation_type=observation,
-        source=source,
-        protocol="ike",
-        protocol_version=response.protocol_version,
-        confidence=Confidence.LOW,
-        probe_result=probe_result,
-        failure_category=probe_result.failure_category,
-        notes=(
-            f"exchange_mode={response.mode.value}",
-            f"transport={'nat_t' if nat_t else 'udp'}",
-        ),
-    )
-
-
-def _algorithm_evidence(
-    response: ParsedIKEResponse, *, asset_id: str, source: str, nat_t: bool
-) -> list[Evidence]:
-    """Build lossless, low-confidence records for tool-reported transforms."""
-    items = (
-        *(("ike.cipher", None, name) for name in response.encryption),
-        *(("ike.prf", None, name) for name in response.prf),
-        *(("ike.integrity", None, name) for name in response.integrity),
-        *(("ike.dh_group", number, name) for number, name in response.dh_groups),
-    )
-    return [
-        Evidence(
-            id=new_id("ev"),
-            asset_id=asset_id,
-            evidence_type=evidence_type,
-            observation_type=ObservationType.OBSERVED,
-            source=source,
-            protocol="ike",
-            protocol_version=response.protocol_version,
-            algorithm=name,
-            confidence=Confidence.LOW,
-            ike_group_id=group_id,
-            notes=(
-                "tool-reported transform identifier",
-                f"exchange_mode={response.mode.value}",
-                f"transport={'nat_t' if nat_t else 'udp'}",
-            ),
-        )
-        for evidence_type, group_id, name in items
-    ]
-
-
-def _notify_evidence(
-    response: ParsedIKEResponse, *, asset_id: str, source: str, nat_t: bool
-) -> Evidence:
-    """Build an explicit rejection record whose name survives serialization."""
-    return Evidence(
-        id=new_id("ev"),
-        asset_id=asset_id,
-        evidence_type="ike.notify",
-        observation_type=ObservationType.OBSERVED,
-        source=source,
-        protocol="ike",
-        protocol_version=response.protocol_version,
-        algorithm=response.responder_notify,
-        confidence=Confidence.LOW,
-        notes=(
-            f"exchange_mode={response.mode.value}",
-            f"transport={'nat_t' if nat_t else 'udp'}",
-        ),
-    )
-
-
-def _response_evidence(
-    response: ParsedIKEResponse,
-    *,
-    asset_id: str,
-    source: str,
-    probe_result: ProbeResult,
-    nat_t: bool,
-) -> list[Evidence]:
-    """Project one parsed response onto the canonical Evidence model."""
-    records = [
-        _mode_evidence(
-            response,
-            asset_id=asset_id,
-            source=source,
-            probe_result=probe_result,
-            nat_t=nat_t,
-        )
-    ]
-    if response.status is IKEParseStatus.REJECTED and response.responder_notify:
-        records.append(_notify_evidence(response, asset_id=asset_id, source=source, nat_t=nat_t))
-    if response.status is not IKEParseStatus.RESPONDED:
-        return records
-    records.extend(_algorithm_evidence(response, asset_id=asset_id, source=source, nat_t=nat_t))
-    if response.identity_exposed:
-        records.append(
-            Evidence(
-                id=new_id("ev"),
-                asset_id=asset_id,
-                evidence_type="ike.identity_exposed",
-                observation_type=ObservationType.OBSERVED,
-                source=source,
-                protocol="ike",
-                protocol_version="IKEv1",
-                confidence=Confidence.LOW,
-                notes=(
-                    "key exchange, nonce, and identity payloads observed before authentication",
-                    f"exchange_mode={response.mode.value}",
-                    f"transport={'nat_t' if nat_t else 'udp'}",
-                ),
-            )
-        )
-    return records
