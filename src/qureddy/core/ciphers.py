@@ -101,6 +101,13 @@ _POST_FAMILY_BITS: tuple[tuple[tuple[str, ...], int], ...] = (
     (("des",), 56),
 )
 
+_PRIMITIVE_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("null",), "other"),
+    (("gcm", "chacha20-poly1305", "ccm"), "ae"),
+    (("rc4", "arcfour"), "stream-cipher"),
+    (("aes", "camellia", "aria", "chacha20", "seed", "idea", "rc2", "des"), "block-cipher"),
+)
+
 
 def _first_marker_bits(lowered: str, rules: tuple[tuple[tuple[str, ...], int], ...]) -> int | None:
     """Return the bits of the first rule whose markers appear in `lowered`."""
@@ -128,18 +135,14 @@ def cipher_primitive(name: str) -> str:
     lowered = name.lower()
     # A NULL suite encrypts nothing, so no cipher primitive describes it. The
     # CycloneDX enum has no "none" member, so "other" is the projection.
-    if "null" in lowered:
-        return "other"
-    if "gcm" in lowered or "chacha20-poly1305" in lowered or "ccm" in lowered:
-        return "ae"
-    if "rc4" in lowered or "arcfour" in lowered:
-        return "stream-cipher"
-    if any(
-        family in lowered
-        for family in ("aes", "camellia", "aria", "chacha20", "seed", "idea", "rc2", "des")
-    ):
-        return "block-cipher"
-    return "unknown"
+    return next(
+        (
+            primitive
+            for markers, primitive in _PRIMITIVE_RULES
+            if any(marker in lowered for marker in markers)
+        ),
+        "unknown",
+    )
 
 
 def has_weak_cipher(accepted_ciphers: tuple[str, ...]) -> bool:
