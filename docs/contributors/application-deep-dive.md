@@ -588,7 +588,9 @@ Confirm an issue and an approved contract before extending them.
 Before changing QuReddy:
 
 1. Confirm the checkout is canonical and record `git rev-parse HEAD`.
-2. Read `CLAUDE.md`, this document, and the relevant architecture contract.
+2. Read `CLAUDE.md`, this document, the [coding rules](coding-rules.md), and the
+   relevant architecture contract. Apply the [commenting contract](coding-rules.md#section-10--comments-and-docstrings)
+   to every changed boundary and regression test.
 3. Trace the existing call path and locate the canonical model field.
 4. Reuse `ScanResult`/`Evidence`/`Finding`; do not invent a result dictionary.
 5. Keep acquisition, policy, evaluation, and rendering in their existing layers.

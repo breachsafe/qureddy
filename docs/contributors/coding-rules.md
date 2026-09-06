@@ -361,7 +361,24 @@ For every public function: test the success case, test each documented exception
 ## Section 10 — Comments and Docstrings
 
 **Rule 10.1 — Every public class and function has a docstring.**
-Google style. Includes Args, Returns, Raises sections where applicable.
+Use Google style. Document intent and observable contract; include Args, Returns, and
+Raises sections where they add information not already obvious from the signature.
+
+**Rule 10.1.1: Comments are context for two readers.**
+Write for the human reviewer deciding whether the behavior is safe and the future agent
+trying not to regress it. Preserve facts that are expensive to rediscover:
+
+- **Why:** the problem or trade-off that makes this implementation necessary.
+- **Invariant:** what must remain true for the result to be correct.
+- **Boundary:** which layer owns the behavior and which consumers depend on it.
+- **Failure semantics:** what absence, uncertainty, timeout, or rejection means.
+- **Security/provenance:** the threat, standard, source, or evidence rule behind a decision.
+- **Compatibility:** the external schema, tool, runtime, or legacy behavior being preserved.
+- **Transition:** a temporary path, its replacement, and the tracking issue when known.
+- **Test intent:** the regression or false-green case the test is meant to pin.
+
+Use only the dimensions that apply. A short, precise comment is better than a checklist
+dump. Keep the durable rationale beside the behavior it constrains.
 
 **Rule 10.2 — Comments explain why, not what.**
 The code says what. Comments explain why the code is the way it is.
@@ -372,20 +389,72 @@ The code says what. Comments explain why the code is the way it is.
 match = re.search(r"Server Temp Key:\s*(\S+)", stdout)
 ```
 
+For policy or classification code, state the consequence of getting the decision wrong:
+
+```python
+# Preserve an observed but unrated suite as an explicit unknown asset. Dropping it
+# would make “unclassified” indistinguishable from “not observed”; do not guess a
+# strength or primitive until the reviewed registry replaces this transitional table.
+return AlgorithmProperties(
+    primitive=cipher_primitive(suite),
+    classical_security_level=cipher_classical_bits(suite),
+)
+```
+
+**Rule 10.2.1: Explain the contract at the narrowest useful layer.**
+Module docstrings explain ownership and source boundaries. Public docstrings explain
+the callable contract. Inline comments explain a non-obvious branch, ordering rule,
+security decision, compatibility constraint, or test seam. Do not duplicate an ADR;
+link it and summarize only the local consequence.
+
+**Rule 10.2.2: Claims in comments must be checkable.**
+Link standards, issues, or source artifacts for externally derived claims. Name the
+schema/version or tool behavior when compatibility depends on it. Do not claim that a
+gate, sanitizer, fallback, or test exists unless the repository actually enforces it.
+
+**Rule 10.2.3: Update comments with behavior.**
+When a change invalidates a comment, update or delete it in the same change. Never use
+line numbers, personal blame, stale incident narratives, speculative future promises,
+or comments that merely paraphrase the next line. Use a tracked `TODO(reason)` only
+for deliberately deferred work.
+
+**Rule 10.2.4: Tests document the failure mode.**
+Test names, class docstrings, and focused comments should identify the behavior pinned:
+the input, boundary, expected contract, and regression risk. Do not write comments that
+assert a test is complete when the test covers only one path.
+
 **Rule 10.3 — No commented-out code. Ever.**
 Git remembers. If it is not running, delete it.
 
 **Rule 10.4 — TODOs require an owner and a reason.**
 `# TODO(reason): description` — and only if there is a tracking issue. Floating `# TODO: fix this` becomes permanent debt.
 
-**Rule 10.5 — No banner comments or ASCII art in source files.**
-Use module docstrings if the file needs explanation.
+**Rule 10.5 — No decorative banners; useful diagrams are required.**
+Use a module docstring for a compact ownership or data-flow diagram. Label every
+branch. Do not add ASCII art for decoration.
+
+**Rule 10.5.1 — Every new or modified source file has a useful diagram.**
+The diagram shows the file's role, inputs, outputs, and key boundaries. Use a tree for
+ownership, a flow for control/data, a state map for lifecycle, or a table for mappings.
+Place it in the module docstring or nearest source-level documentation. A stale,
+decorative, or vague diagram fails this rule.
+
+**Rule 10.5.2 — Fixes and cleanup revalidate documentation.**
+Before approval, compare the changed code with its diagram and comments. Update stale
+ownership, flow, invariants, failure semantics, or test-intent text in the same change.
+The diagram, comments, and code must describe the same behavior.
 
 **Rule 10.6 — Do not repeat the type hint in the docstring.**
 The signature already documents types. The docstring documents intent.
 
 **Rule 10.7 — No `# noqa` or `# fmt: off` without a specific code AND a comment.**
 `# noqa: E501  # URL must not be wrapped` is acceptable. Bare `# noqa` is not.
+
+**10/10 review gate.** Before approval, ask: Can a reviewer explain why this code exists,
+what must not change, who owns the boundary, what uncertainty/failure means, what
+security or provenance rule applies, what compatibility is preserved, whether the path
+is transitional, and which test prevents regression? If not, improve the code structure
+or add the smallest durable comment that answers the missing question.
 
 ---
 

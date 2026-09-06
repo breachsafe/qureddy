@@ -6,6 +6,27 @@ The algorithm/cipher-suite/protocol/certificate cryptographic-asset
 components QuReddy positively observed, plus their classification profiles.
 Split out of ``cbom.py`` to keep that module under the file-size ceiling;
 the rendered CBOM is unchanged (#171).
+
+Projection preserves observation before classification:
+
+    ScanResult evidence
+    ├── cipher suite → ciphers.py → AlgorithmProperties
+    │   ├── known strength  → classicalSecurityLevel
+    │   ├── known primitive  → primitive
+    │   └── unknown suite   → component retained, strength omitted,
+    │                         primitive = unknown
+    ├── key exchange → key-exchange classifier → AlgorithmProperties
+    └── signature    → signature classifier → AlgorithmProperties
+
+CBOM outputs:
+
+    cipher classification
+    ├── AlgorithmProperties.primitive
+    ├── AlgorithmProperties.classicalSecurityLevel, when sourced
+    └── legacy weak finding/component verdict, when a marker matches
+
+Unknown cipher classification remains a CBOM component. Unrated strength leaves
+`classicalSecurityLevel` absent. This adapter owns projection; ciphers.py owns classification.
 """
 
 from __future__ import annotations
@@ -89,15 +110,17 @@ def add_algorithm_components(
     )
 
 
-def _cipher_suite_properties(suite: str) -> AlgorithmProperties | None:
-    """AEAD algorithmProperties for a TLS 1.3 cipher suite, keyed by classical bits.
+def _cipher_suite_properties(suite: str) -> AlgorithmProperties:
+    """Build TLS 1.3 properties, retaining unknown suites as explicit unknown assets.
 
     Classification is shared with the legacy TLS and SSH cipher emitters (#315).
+    A missing strength is intentional: the observed suite remains inventory evidence,
+    while ``unknown`` prevents the CBOM from implying a guessed cipher family (#821).
     """
-    bits = cipher_classical_bits(suite)
-    if bits is None:
-        return None
-    return AlgorithmProperties(primitive=cipher_primitive(suite), classical_security_level=bits)
+    return AlgorithmProperties(
+        primitive=cipher_primitive(suite),
+        classical_security_level=cipher_classical_bits(suite),
+    )
 
 
 def add_cipher_suite_components(

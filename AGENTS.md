@@ -24,6 +24,8 @@ the complete policy; this file intentionally avoids restating it.
   an explicit licensing decision.
 - Keep SSH acquisition/`ssh-audit` migration parked in the 0.5.0 backlog.
 - Do not infer that a green command ran all checks. Record commands and exit codes.
+- Code comments and docstrings must preserve reviewer/agent context; follow the
+  [commenting contract](docs/contributors/coding-rules.md#section-10--comments-and-docstrings).
 
 ## Ten-step change loop
 

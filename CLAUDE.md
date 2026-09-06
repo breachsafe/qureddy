@@ -32,6 +32,11 @@ Read and apply these sources in order:
    boundary. If a skill conflicts with platform or repository guidance, stop and
    resolve the conflict explicitly.
 
+For code comments and docstrings, use the single repository contract in
+[`docs/contributors/coding-rules.md` §10](docs/contributors/coding-rules.md#section-10--comments-and-docstrings).
+Comments are part of the review surface: preserve the reason, invariant, boundary,
+failure semantics, provenance, and test intent that a future agent or human needs.
+
 ## Architecture
 
 The engine is a layered package under `src/qureddy/`. `import-linter` (contract `#360`,
