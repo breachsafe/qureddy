@@ -32,9 +32,12 @@ from tests.test_output import _build_result
         ("ECDHE-RSA-AES128-SHA", 128),
         ("DES-CBC3-SHA", 112),
         ("ECDHE-RSA-CHACHA20-POLY1305", 256),
-        # Families the OpenSSL 1.0.2u compatibility lane can negotiate and the
-        # 3.5.7 lane cannot. Previously all None, which dropped them from the
-        # CBOM as unclassified. A rated value records them as weak.
+        # Families that previously returned None, so the component shipped with
+        # no classicalSecurityLevel. Rating them records a strength; it does not
+        # mark them weak. WEAK_CIPHER_MARKERS is unchanged, so CAMELLIA, ARIA,
+        # SEED and IDEA stay quantum_vulnerable/low. Only RC4, RC2, single DES
+        # and IDEA are exclusive to the 1.0.2u lane; camellia, aria and NULL are
+        # in the 3.5 corpus too.
         ("CAMELLIA128-SHA", 128),
         ("CAMELLIA256-SHA", 256),
         ("ARIA256-GCM-SHA384", 256),
@@ -53,6 +56,20 @@ from tests.test_output import _build_result
         ("ECDHE-RSA-NULL-SHA", 0),
         # No primary source for GOST's classical strength, so it stays unrated.
         ("GOST2001-GOST89-GOST89", None),
+        # A size token in the name beats the family default (PR #824 review).
+        ("RC4-64-MD5", 64),
+        ("arcfour256", 256),
+        ("arcfour128", 128),
+        ("arcfour", 128),
+        # "exp1024" is not a substring of the IANA "EXPORT1024" spelling.
+        ("TLS_RSA_EXPORT1024_WITH_RC4_56_SHA", 56),
+        ("TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA", 56),
+        # Triple IDEA contains "idea"; no source rates it, so it must not
+        # inherit IDEA's 128.
+        ("ENCR_3IDEA", None),
+        # An unrecognised name rates nothing rather than guessing.
+        ("AES512-SHA", None),
+        ("TOTALLY-UNKNOWN-CIPHER", None),
     ],
 )
 def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
@@ -182,3 +199,14 @@ def test_render_emits_legacy_cipher_components_with_verdict() -> None:
     assert weak_props.count(("qureddy:rule_id", "tls.legacy.cipher_weak")) == 1
     strong_props = {p["name"]: p["value"] for p in components["AES256-GCM-SHA384"]["properties"]}
     assert strong_props["qureddy:readiness"] == "quantum_vulnerable"
+
+
+def test_pass_order_is_the_correctness_property() -> None:
+    """The four passes must run in order; row order inside a table is free.
+
+    Running pass 3 before pass 1 misrates these three, so this pins the
+    sequence that `cipher_classical_bits` documents (PR #824 review).
+    """
+    assert cipher_classical_bits("DES-CBC3-SHA") == 112, "3DES must beat the 'des' inside it"
+    assert cipher_classical_bits("EXP-RC4-MD5") == 40, "export cap must beat RC4's 128"
+    assert cipher_classical_bits("EXP1024-RC4-SHA") == 56, "exp1024 must beat the 40-bit cap"
