@@ -101,7 +101,7 @@ jobs:
   # ===========================================================================
   max-code-quality:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     name: MAX code-quality
     runs-on: ubuntu-latest
     steps:
@@ -144,10 +144,9 @@ jobs:
   # ===========================================================================
   changed-line-coverage:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
     name: Changed-line coverage (100%)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -193,9 +192,8 @@ jobs:
   # blocking pull-request path until its first real consumer run is green.
   reusable-canary:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
     name: Reusable gate canary
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && github.event_name == 'workflow_dispatch' }}
     # Pin the current reusable gate revision. The previous pin referenced a
     # retired scanner binary and failed during the canary (#519).
     uses: paul007ex/breachsafe-golden-python/.github/workflows/quality-gates-python.yml@8cb20e182307847f67b3daf5bbe2be1b4195f465 # v1

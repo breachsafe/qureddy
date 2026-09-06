@@ -102,7 +102,7 @@ jobs:
   # ===========================================================================
   phase-1-static:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     name: "Phase 1: Static (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     strategy:
@@ -458,7 +458,7 @@ jobs:
   # ===========================================================================
   cbom-conformance:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     name: "CBOM: CycloneDX 1.7 final bytes"
     runs-on: ubuntu-latest
 
@@ -507,7 +507,7 @@ jobs:
   # ===========================================================================
   packaging-build:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     name: "Package: build and runtime audit"
     runs-on: ubuntu-latest
 
