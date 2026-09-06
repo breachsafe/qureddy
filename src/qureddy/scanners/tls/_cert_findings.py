@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE
 # SPDX-License-Identifier: Apache-2.0
-"""Evidence/Finding builders for the certificate issuer-signature axis (issue #183).
+"""Evidence/Finding builders for certificate signature and hygiene axes (#183, #789).
 
 Issue #226 correction: this is the certificate's *issuer* signature axis
 (chain-of-trust), not a live-handshake authentication claim — see cert_sig.py's
@@ -20,10 +20,11 @@ the axis visible and honest, not blindly asserted.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from qureddy.core.algorithm_profile import AlgorithmProfile, classify_signature_algorithm
-from qureddy.core.certificate import CertificateObservation
+from qureddy.core.certificate import CertificateObservation, parse_openssl_date
 from qureddy.core.ids import new_id
 from qureddy.core.models import (
     Asset,
@@ -36,7 +37,9 @@ from qureddy.core.models import (
 )
 from qureddy.scanners.common.finding_types import (
     FINDING_TYPE_CLASSICAL_SIGNATURE,
+    FINDING_TYPE_EXPIRED_CERTIFICATE,
     FINDING_TYPE_PQ_SIGNATURE,
+    FINDING_TYPE_WEAK_CERTIFICATE_SIGNATURE,
 )
 from qureddy.scanners.tls.cert_sig import pqc_signature_standard
 
@@ -139,4 +142,76 @@ def finding_from_certificate(
         primitive=evidence.primitive,
         parameter_set_identifier=evidence.parameter_set_identifier,
         nist_quantum_security_level=evidence.nist_quantum_security_level,
+    )
+
+
+def findings_from_certificate(
+    asset: Asset,
+    evidence: Evidence,
+    certificate: CertificateInfo | None,
+    *,
+    now: datetime | None = None,
+) -> tuple[Finding, ...]:
+    """Return the certificate signature axis plus independently actionable hygiene findings."""
+    if certificate is None:
+        return ()
+    primary = finding_from_certificate(asset, evidence, certificate)
+    if primary is None:
+        return ()
+    findings = [primary]
+    signature = certificate.signature_algorithm.lower()
+    weak = _weak_signature_finding(primary, certificate, signature)
+    if weak is not None:
+        findings.append(weak)
+    expired = _expired_certificate_finding(primary, certificate, now=now)
+    if expired is not None:
+        findings.append(expired)
+    return tuple(findings)
+
+
+def _weak_signature_finding(
+    primary: Finding, certificate: CertificateInfo, signature: str
+) -> Finding | None:
+    """Build a hygiene finding for a deprecated or broken issuer signature."""
+    if not any(marker in signature for marker in ("md5", "sha1", "sha-1")):
+        return None
+    return primary.model_copy(
+        update={
+            "id": new_id("finding"),
+            "rule_id": "tls.cert.weak_signature_algorithm",
+            "finding_type": FINDING_TYPE_WEAK_CERTIFICATE_SIGNATURE,
+            "title": f"Weak certificate issuer signature: {certificate.signature_algorithm}",
+            "description": (
+                f"Leaf certificate subject={certificate.subject!r} uses "
+                f"{certificate.signature_algorithm}, which is deprecated or collision-broken "
+                "for certificate issuer signatures. Replace the certificate chain with a "
+                "SHA-2-or-stronger signature algorithm."
+            ),
+            "severity": Severity.CRITICAL if "md5" in signature else Severity.HIGH,
+            "readiness": Readiness.CLASSICALLY_WEAK,
+        }
+    )
+
+
+def _expired_certificate_finding(
+    primary: Finding, certificate: CertificateInfo, *, now: datetime | None
+) -> Finding | None:
+    """Build a hygiene finding when the observed certificate is expired."""
+    not_after = parse_openssl_date(certificate.not_after)
+    comparison_time = now or datetime.now(UTC)
+    if not_after is None or not_after > comparison_time:
+        return None
+    return primary.model_copy(
+        update={
+            "id": new_id("finding"),
+            "rule_id": "tls.cert.expired",
+            "finding_type": FINDING_TYPE_EXPIRED_CERTIFICATE,
+            "title": "Expired TLS certificate",
+            "description": (
+                f"Leaf certificate subject={certificate.subject!r} expired at "
+                f"{not_after.isoformat()}. Replace it before relying on this endpoint."
+            ),
+            "severity": Severity.HIGH,
+            "readiness": Readiness.CLASSICALLY_WEAK,
+        }
     )
