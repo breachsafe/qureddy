@@ -10,6 +10,16 @@ name: CI
 
 on:
   pull_request:
+    paths-ignore:
+      # Documentation-only changes cannot affect these gates. Every one of them
+      # builds the package and runs the suite; none reads a Markdown file.
+      # Safe because this repo has no required-status-check protection, so a
+      # skipped workflow leaves no check pending and blocks no merge.
+      - "**/*.md"
+      - "docs/**"
+      - "LICENSES/**"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/*.md"
     branches: [main]
   workflow_dispatch:
   schedule:
