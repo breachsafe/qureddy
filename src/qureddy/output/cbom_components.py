@@ -93,6 +93,8 @@ def _cipher_suite_properties(suite: str) -> AlgorithmProperties:
     """Build TLS 1.3 properties, retaining unknown suites as explicit unknown assets.
 
     Classification is shared with the legacy TLS and SSH cipher emitters (#315).
+    A missing strength is intentional: the observed suite remains inventory evidence,
+    while ``unknown`` prevents the CBOM from implying a guessed cipher family (#821).
     """
     return AlgorithmProperties(
         primitive=cipher_primitive(suite),

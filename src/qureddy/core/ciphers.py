@@ -12,8 +12,10 @@ significant. An export prefix has to resolve before the cipher it names, and
 3DES before the "des" inside it. The three tables below encode that order;
 `WEAK_CIPHER_MARKERS` is order-independent.
 
-None means no source in this repository rates the cipher, currently GOST alone (#815).
-Emit the component and leave `classicalSecurityLevel` unset.
+`cipher_classical_bits()` returns None when this transitional table has no sourced
+rating. GOST is the remaining known unrated family in the current runtime corpus;
+future names also take this path until the reviewed registry is authoritative (#821).
+The CBOM must retain those observations and mark their primitive `unknown`.
 
 One axis of four, and where each return value lands. CBOM callers reach the
 first two through the cbom_cipher adapter, which maps the primitive string to
@@ -68,7 +70,11 @@ WEAK_CIPHER_MARKERS: tuple[str, ...] = (
 
 
 def _sized_family_bits(lowered: str, family: str) -> int | None:
-    """Return the key size for a family whose name carries it (aes128, aria-256)."""
+    """Return a name-encoded size, or None when the syntax is not recognized.
+
+    Only the spellings already used by the supported cipher inventories are accepted.
+    This deliberately does not guess a size from an arbitrary digit in a future name.
+    """
     for size in (256, 192, 128):
         if (
             f"{family}{size}" in lowered
@@ -101,6 +107,9 @@ _POST_FAMILY_BITS: tuple[tuple[tuple[str, ...], int], ...] = (
     (("des",), 56),
 )
 
+# Keep these rules ordered: NULL must become ``other`` before generic AE/block
+# matching, and an unrecognized name must remain ``unknown`` rather than acquire
+# a guessed primitive. The future registry will replace this transitional table.
 _PRIMITIVE_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     (("null",), "other"),
     (("gcm", "chacha20-poly1305", "ccm"), "ae"),
@@ -110,7 +119,11 @@ _PRIMITIVE_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 
 
 def _first_marker_bits(lowered: str, rules: tuple[tuple[tuple[str, ...], int], ...]) -> int | None:
-    """Return the bits of the first rule whose markers appear in `lowered`."""
+    """Return the first ordered rule match; rule order is part of the policy.
+
+    Export and 3DES names contain ordinary cipher markers, so callers place their
+    disambiguating rules before generic family rules.
+    """
     for markers, bits in rules:
         if any(marker in lowered for marker in markers):
             return bits
@@ -118,7 +131,12 @@ def _first_marker_bits(lowered: str, rules: tuple[tuple[tuple[str, ...], int], .
 
 
 def cipher_classical_bits(name: str) -> int | None:
-    """Classical security strength in bits, or None when no source assigns one."""
+    """Return sourced classical strength in bits, or None without a valid mapping.
+
+    None is an evidence state, not permission to discard the observed algorithm.
+    Callers that emit CBOM assets must preserve the asset and leave its strength
+    absent rather than converting uncertainty to zero or a guessed value.
+    """
     lowered = name.lower()
     bits = _first_marker_bits(lowered, _PRE_FAMILY_BITS)
     if bits is not None:
@@ -131,7 +149,11 @@ def cipher_classical_bits(name: str) -> int | None:
 
 
 def cipher_primitive(name: str) -> str:
-    """Return the protocol-neutral primitive, or ``unknown`` for an unrecognized name."""
+    """Return the protocol-neutral primitive, or ``unknown`` without a safe mapping.
+
+    This is intentionally conservative: a name that is not recognized by the
+    transitional family table must not be presented as a block cipher by default.
+    """
     lowered = name.lower()
     # A NULL suite encrypts nothing, so no cipher primitive describes it. The
     # CycloneDX enum has no "none" member, so "other" is the projection.

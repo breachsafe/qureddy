@@ -71,18 +71,22 @@ def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
         ("CAMELLIA256-SHA", "block-cipher"),
         # No CycloneDX primitive describes "encrypts nothing".
         ("NULL-MD5", "other"),
+        # Unknown is explicit; it is not silently promoted to block-cipher.
         ("FUTURE-CIPHER-999", "unknown"),
     ],
 )
 def test_legacy_cipher_primitive(name: str, primitive: str) -> None:
+    """Keep primitive mapping explicit for known, NULL, and future cipher names."""
     assert cipher_primitive(name).value == primitive
 
 
 def test_unrecognized_cipher_primitive_is_explicitly_unknown() -> None:
+    """Prevent an unrecognized future name from receiving a fabricated primitive."""
     assert cipher_primitive("FUTURE-CIPHER-999").value == "unknown"
 
 
 def test_unrecognized_tls_cipher_suite_is_retained_in_cbom() -> None:
+    """Keep observed future suites visible without inventing their strength."""
     base = _build_result()
     evidence = Evidence(
         id="unknown-suite",
