@@ -1,9 +1,11 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE
 # SPDX-License-Identifier: Apache-2.0
-"""Unit tests for the legacy TLS cipher CBOM emitter + classifier (#303).
+"""Unit tests for the legacy TLS cipher CBOM emitter and classifier (#303).
 
-The ``classically_weak`` branch cannot be reached by a real scan — OpenSSL 3.5.7 LTS has
-3DES/RC4 compiled out and refuses to negotiate them — so it is covered here directly.
+The ``classically_weak`` branch is unreachable on the pinned OpenSSL 3.5.7 lane,
+which has 3DES, RC4, and single DES compiled out. The 1.0.2u compatibility lane
+negotiates them, and it is optional at runtime, so the branch is exercised here
+against cipher names directly.
 """
 
 from __future__ import annotations
@@ -30,8 +32,27 @@ from tests.test_output import _build_result
         ("ECDHE-RSA-AES128-SHA", 128),
         ("DES-CBC3-SHA", 112),
         ("ECDHE-RSA-CHACHA20-POLY1305", 256),
-        ("RC4-SHA", None),
-        ("NULL-MD5", None),
+        # Families the OpenSSL 1.0.2u compatibility lane can negotiate and the
+        # 3.5.7 lane cannot. Previously all None, which dropped them from the
+        # CBOM as unclassified. A rated value records them as weak.
+        ("CAMELLIA128-SHA", 128),
+        ("CAMELLIA256-SHA", 256),
+        ("ARIA256-GCM-SHA384", 256),
+        ("SEED-SHA", 128),
+        ("IDEA-CBC-SHA", 128),
+        ("RC4-SHA", 128),
+        ("RC2-CBC-MD5", 128),
+        ("DES-CBC-SHA", 56),
+        # EXPORT is capped by regulation, so it must not inherit the strength of
+        # the cipher it names.
+        ("EXP-RC4-MD5", 40),
+        ("EXP-DES-CBC-SHA", 40),
+        ("EXP1024-RC4-SHA", 56),
+        # A NULL suite establishes no confidentiality: zero bits, stated.
+        ("NULL-MD5", 0),
+        ("ECDHE-RSA-NULL-SHA", 0),
+        # No primary source for GOST's classical strength, so it stays unrated.
+        ("GOST2001-GOST89-GOST89", None),
     ],
 )
 def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
@@ -43,9 +64,13 @@ def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
     [
         ("ECDHE-RSA-AES256-GCM-SHA384", "ae"),
         ("ECDHE-RSA-CHACHA20-POLY1305", "ae"),
+        ("ARIA128-GCM-SHA256", "ae"),
         ("RC4-SHA", "stream-cipher"),
         ("DES-CBC3-SHA", "block-cipher"),
         ("ECDHE-RSA-AES128-SHA", "block-cipher"),
+        ("CAMELLIA256-SHA", "block-cipher"),
+        # No CycloneDX primitive describes "encrypts nothing".
+        ("NULL-MD5", "other"),
     ],
 )
 def test_legacy_cipher_primitive(name: str, primitive: str) -> None:
