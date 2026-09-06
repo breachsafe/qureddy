@@ -8,13 +8,26 @@
 # debian-slim, 1.0.2u from ubuntu:20.04) and rebuilt both on every CI run and every
 # local `docker build .`.
 #
-# The SERIES tag, not a patch tag: a 3.5.x bump lands here with no edit. The image
-# gates its own contents to >=3.5.7,<3.6 and fails its build outside that range, so
-# the tag cannot lie about what it carries.
+# Each OpenSSL comes from its own image rather than from the toolchain image that
+# used to carry both. The crypto is then pinned by its own digest: a toolchain
+# change cannot silently move it, and this build pulls ~110 MB of OpenSSL instead
+# of a full CI toolchain it never runs.
 #
-# Source: paul007ex/breachsafe-container. Its python lane is python:3.14-slim-bookworm,
-# the same base as the final stage below, so these binaries link the same libc.
-FROM ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5@sha256:15eb1539a7a0045b6eaae18d636802c34d1ec8dde12f7814dd4d6dd6689fd285 AS openssl-src
+# Source: paul007ex/breachsafe-container, published by its openssl-publish workflow
+# and signed keyless with GitHub OIDC. Verify before changing a digest here:
+#
+#   cosign verify ghcr.io/paul007ex/breachsafe-openssl:3.5.8 \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     --certificate-identity-regexp \
+#       '^https://github.com/paul007ex/breachsafe-container/\.github/workflows/openssl-publish\.yml@refs/'
+#
+# The prefixes are built on python:3.14-slim-bookworm, the same base as the final
+# stage below, so these binaries link the same libc.
+FROM ghcr.io/paul007ex/breachsafe-openssl:3.5.8@sha256:36dbb1ef300eab5ff775dd51b73efe7351273ddd90c533bf3f8013d0c47e8fa9 AS openssl-src
+
+# Isolated legacy compatibility helper, its own image and its own digest so it can
+# never be confused with the production OpenSSL above.
+FROM ghcr.io/paul007ex/breachsafe-openssl:1.0.2u@sha256:f1ea087b0e6b44f7134773b0d567d7b2fb01a88451cc360e0915e229e6d8c8c7 AS openssl-legacy-src
 
 # Build the wheel from source inside the image (#253) so a fresh `docker build .`
 # needs no host-built dist/ artifact. hatchling reads the static version from
@@ -45,7 +58,7 @@ COPY --from=openssl-src /opt/openssl /opt/openssl
 # Isolated legacy compatibility helper. OpenSSL 1.0.2u is EOL and must never
 # replace the production OpenSSL or enter PATH. It is retained only for
 # explicitly selected legacy cipher/STARTTLS evidence collection.
-COPY --from=openssl-src /opt/openssl-legacy /opt/openssl-legacy
+COPY --from=openssl-legacy-src /opt/openssl-legacy /opt/openssl-legacy
 
 # IKE scans invoke Debian's stock ike-scan as a separate process. Keep the
 # package's installed copyright and license notice with the runtime image.
