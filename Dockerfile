@@ -1,69 +1,20 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE
 # SPDX-License-Identifier: Apache-2.0
 
-FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS openssl-build
-
-# Keep the source archive reproducible, but track the current patched release in
-# the supported 3.5 LTS series. Override both values together for a reviewed
-# rebuild; the runtime validator accepts any supported 3.5.x patch release.
-ARG OPENSSL_VERSION=3.5.8
-ARG OPENSSL_SHA256=a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential ca-certificates curl perl \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 \
-      "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
-      --output /tmp/openssl.tar.gz \
-    && echo "${OPENSSL_SHA256}  /tmp/openssl.tar.gz" | sha256sum --check --strict \
-    && mkdir /tmp/openssl-src \
-    && tar --extract --gzip --strip-components=1 --file /tmp/openssl.tar.gz --directory /tmp/openssl-src \
-    && cd /tmp/openssl-src \
-    && ./Configure --prefix=/opt/openssl --openssldir=/opt/openssl/ssl shared no-tests \
-    && make -j"$(nproc)" build_libs \
-    && make -j"$(nproc)" apps/openssl \
-    && make install_sw \
-    && rm -rf /tmp/openssl.tar.gz /tmp/openssl-src
-
-# Isolated legacy compatibility helper. OpenSSL 1.0.2u is EOL and must never
-# replace the production OpenSSL or enter PATH. It is retained only for
-# explicitly selected legacy cipher/STARTTLS evidence collection.
-FROM ubuntu:20.04@sha256:8feb4d8ca5354def3d8fce243717141ce31e2c428701f6682bd2fafe15388214 AS openssl-legacy-build
-
-ARG TARGETARCH
-ARG LEGACY_OPENSSL_VERSION=1.0.2u
-ARG LEGACY_OPENSSL_SHA256=ecd0c6ffb493dd06707d38b14bb4d8c2288bb7033735606569d8f90f89669d16
-
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl perl make \
-    && rm -rf /var/lib/apt/lists/* \
-    # Prefer the signed upstream release mirror; retain openssl.org as a fallback because
-    # either public endpoint can be transiently unavailable in a hosted builder.
-    && (curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 \
-      "https://github.com/openssl/openssl/releases/download/OpenSSL_${LEGACY_OPENSSL_VERSION}/openssl-${LEGACY_OPENSSL_VERSION}.tar.gz" \
-      --output /tmp/openssl-legacy.tar.gz \
-      || curl --fail --location --proto '=https' --connect-timeout 30 --max-time 300 \
-      "https://www.openssl.org/source/old/1.0.2/openssl-${LEGACY_OPENSSL_VERSION}.tar.gz" \
-      --output /tmp/openssl-legacy.tar.gz) \
-    && echo "${LEGACY_OPENSSL_SHA256}  /tmp/openssl-legacy.tar.gz" | sha256sum --check --strict \
-    && mkdir /tmp/openssl-legacy-src \
-    && tar --extract --gzip --strip-components=1 --file /tmp/openssl-legacy.tar.gz --directory /tmp/openssl-legacy-src \
-    && cd /tmp/openssl-legacy-src \
-    && case "${TARGETARCH}" in \
-      amd64) configure_target=linux-x86_64 ;; \
-      arm64) configure_target=linux-aarch64 ;; \
-      *) echo "unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac \
-    && ./Configure "${configure_target}" no-shared enable-ssl3 enable-weak-ssl-ciphers --prefix=/opt/openssl-legacy \
-    && make depend \
-    && make -j"$(nproc)" \
-    && make install_sw \
-    && install -D -m 0755 /opt/openssl-legacy/bin/openssl /opt/openssl-legacy-runtime/bin/openssl \
-    && install -D -m 0644 LICENSE /opt/openssl-legacy-runtime/LICENSE \
-    && install -D -m 0644 /opt/openssl-legacy/ssl/openssl.cnf /opt/openssl-legacy-runtime/ssl/openssl.cnf \
-    && /opt/openssl-legacy-runtime/bin/openssl version
+# Both OpenSSL builds come from the pinned toolchain image. Nothing is compiled
+# here. They are product requirements everywhere and they change only on a version
+# bump, so the compile belongs once at the root of the chain, not on every build of
+# every consumer. Previously this file carried two from-source stages (3.5.x from
+# debian-slim, 1.0.2u from ubuntu:20.04) and rebuilt both on every CI run and every
+# local `docker build .`.
+#
+# The SERIES tag, not a patch tag: a 3.5.x bump lands here with no edit. The image
+# gates its own contents to >=3.5.7,<3.6 and fails its build outside that range, so
+# the tag cannot lie about what it carries.
+#
+# Source: paul007ex/breachsafe-container. Its python lane is python:3.14-slim-bookworm,
+# the same base as the final stage below, so these binaries link the same libc.
+FROM ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5 AS openssl-src
 
 # Build the wheel from source inside the image (#253) so a fresh `docker build .`
 # needs no host-built dist/ artifact. hatchling reads the static version from
@@ -90,8 +41,11 @@ LABEL org.opencontainers.image.title="QuReddy" \
       io.breachsafe.qureddy.openssl-legacy.version="1.0.2u" \
       io.breachsafe.qureddy.ike-scan.version="${IKE_SCAN_VERSION}"
 
-COPY --from=openssl-build /opt/openssl /opt/openssl
-COPY --from=openssl-legacy-build /opt/openssl-legacy-runtime /opt/openssl-legacy
+COPY --from=openssl-src /opt/openssl /opt/openssl
+# Isolated legacy compatibility helper. OpenSSL 1.0.2u is EOL and must never
+# replace the production OpenSSL or enter PATH. It is retained only for
+# explicitly selected legacy cipher/STARTTLS evidence collection.
+COPY --from=openssl-src /opt/openssl-legacy /opt/openssl-legacy
 
 # IKE scans invoke Debian's stock ike-scan as a separate process. Keep the
 # package's installed copyright and license notice with the runtime image.
@@ -104,6 +58,22 @@ ENV QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
     QUREDDY_LEGACY_OPENSSL=/opt/openssl-legacy/bin/openssl \
     LD_LIBRARY_PATH=/opt/openssl/lib64:/opt/openssl/lib \
     PATH=/opt/openssl/bin:$PATH
+
+# The base image is pulled by a SERIES tag, so its exact patch can move between
+# builds. Assert what actually arrived matches what the labels above claim, and
+# fail the build here rather than shipping an image whose labels lie. This is the
+# check that replaces owning the compile. It runs after the ENV above because the
+# 3.5.x build is `shared`: without LD_LIBRARY_PATH the binary produces no output and
+# the comparison silently sees an empty string.
+RUN set -eu; \
+    got="$(/opt/openssl/bin/openssl version | cut -d' ' -f2)"; \
+    [ "$got" = "${OPENSSL_VERSION}" ] || { \
+      echo "base image ships OpenSSL $got, labels claim ${OPENSSL_VERSION}" >&2; exit 1; }; \
+    got_legacy="$(/opt/openssl-legacy/bin/openssl version | cut -d' ' -f2)"; \
+    [ "$got_legacy" = "1.0.2u" ] || { \
+      echo "base image ships legacy OpenSSL $got_legacy, labels claim 1.0.2u" >&2; exit 1; }; \
+    /opt/openssl/bin/openssl list -tls1_3 -tls-groups | grep -q X25519MLKEM768 \
+      || { echo "base OpenSSL lacks X25519MLKEM768" >&2; exit 1; }
 
 RUN addgroup --gid 1000 qureddy \
     && adduser --uid 1000 --gid 1000 --disabled-password --gecos "" qureddy \
