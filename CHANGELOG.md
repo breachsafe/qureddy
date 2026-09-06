@@ -47,6 +47,12 @@ versions follow [PEP 440](https://peps.python.org/pep-0440/).
   ([viewer issue #31](https://github.com/BreachSAFE/breachsafe-cbom-kit-viewer/issues/31)).
 - Suppress CycloneDX serializer debug chatter from verbose scan logs while preserving JSON
   wrapping for other third-party standard-library log records.
+- Skip the opt-in IKE acceptance suite when no authorized responder answers, instead of
+  failing the whole quality gate on a missing lab precondition. Tool presence no longer
+  stands in for a responder: loopback reflection off an unbound UDP/500 was passing the
+  suite before the unbound-header check landed. Set `QUREDDY_IKE_LAB_REQUIRED=1` on a
+  provisioned lab to turn the skip back into a failure
+  ([issue #740](https://github.com/BreachSAFE/qureddy/issues/740)).
 
 ### Added
 
