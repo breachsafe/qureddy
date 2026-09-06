@@ -6,6 +6,27 @@ The ``classically_weak`` branch is unreachable on the pinned OpenSSL 3.5.7 lane,
 which has 3DES, RC4, and single DES compiled out. The 1.0.2u compatibility lane
 negotiates them, and it is optional at runtime, so the branch is exercised here
 against cipher names directly.
+
+Coverage map. One seam per row, with the failure mode each row pins:
+
+    cipher name
+    ├── cipher_classical_bits()   → test_legacy_cipher_bits
+    │     ├── rated family        → export caps and 3DES resolve below their key size
+    │     └── unrated family      → None, so GOST never acquires a guessed number
+    ├── cipher_primitive()        → test_legacy_cipher_primitive
+    │     ├── known family        → ae, stream-cipher, block-cipher
+    │     ├── NULL                → other, since the enum has no "encrypts nothing"
+    │     └── unrecognized name   → unknown, never promoted to block-cipher (#821)
+    ├── cbom_legacy._legacy_cipher_properties  → classical level set, quantum level absent
+    ├── cbom_legacy._legacy_cipher_verdict     → readiness and severity properties
+    ├── cipher_evidence_from_legacy_result     → one Evidence per accepted cipher
+    └── render_cbom()             → end-to-end component shape
+          ├── rated suite         → component carries classicalSecurityLevel
+          └── unrated suite       → component retained, classicalSecurityLevel absent
+
+Boundary: this file owns the legacy TLS cipher seam. Key exchange, signature, and
+certificate projection are pinned by their own test modules, so a change to those
+classifiers does not turn these tests red.
 """
 
 from __future__ import annotations
