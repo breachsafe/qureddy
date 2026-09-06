@@ -18,7 +18,7 @@ on:
       version:
         description: Image version to publish
         required: true
-        default: 0.9.13
+        default: 0.9.14
       publish:
         description: Push the multi-architecture image to GHCR and Docker Hub
         required: true
