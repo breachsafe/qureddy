@@ -43,14 +43,14 @@ jobs:
   # Phase 1 — Static analysis (no execution).
   # Lint, format-check, type, static security, dep CVEs, license, secrets.
   # ===========================================================================
+  # ubuntu only. Every step here is static analysis: ruff, mypy, bandit,
+  # pip-audit, deptry, reuse, and a git-based provenance check. None reads the
+  # host platform, so a second run on macos-latest returns the same verdict for
+  # twice the runner time. Platform coverage lives in phases 2 to 4, which
+  # execute code and keep the [ubuntu, macos] matrix.
   phase-1-static:
-    name: "Phase 1: Static (${{ matrix.os }})"
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
+    name: "Phase 1: Static"
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
