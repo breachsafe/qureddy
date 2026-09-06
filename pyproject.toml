@@ -5,7 +5,7 @@
 
 [project]
 name = "breachsafe-qureddy"
-version = "0.9.9"
+version = "0.9.10"
 description = "Open-source post-quantum readiness scanner for TLS, SSH, and IKE endpoints."
 readme = "README.md"
 requires-python = ">=3.14"
