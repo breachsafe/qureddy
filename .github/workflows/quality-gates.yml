@@ -41,10 +41,67 @@ defaults:
     shell: bash
 
 jobs:
+
+  # Change detection. `main` protection requires named contexts with strict: true,
+  # so a workflow that never starts leaves them unreported and blocks the merge.
+  # A job that starts and skips reports its context as skipped, which protection
+  # accepts. The workflow always runs; the expensive jobs opt out. Any uncertainty
+  # defaults to running everything.
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the diff
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")" || {
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          changed="$(git diff --name-only "$merge_base" "$HEAD_SHA")"
+          echo "$changed"
+          # A deny-list, not an allow-list, so the failure direction is "run the
+          # gates". An allow-list of code paths silently skips on any file it does
+          # not know about: Justfile, REUSE.toml, .jscpd.json, .gitignore and
+          # .python-version all change CI behaviour and none of them looks like
+          # source. Only a diff where EVERY file is documentation skips.
+          # LICENSES/ is deliberately absent: a licence change must still run
+          # reuse lint.
+          if [ -z "$changed" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Count non-documentation files rather than using `grep -vq`. On BSD grep
+          # `-v -q` reports whether the PATTERN matched, not whether any line was
+          # output, so a mixed docs+code diff exits 1 and would skip every gate.
+          # Counting is unambiguous on both greps. `|| true` because grep exits 1
+          # on a zero count and this script runs under `set -e`.
+          non_doc="$(echo "$changed" | grep -cvE '(^|/)[^/]+\.md$|^docs/|^\.github/ISSUE_TEMPLATE/' || true)"
+          if [ "${non_doc:-1}" -gt 0 ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "documentation-only diff; heavy jobs will skip"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # ===========================================================================
   # Architecture + code-quality (no test execution).
   # ===========================================================================
   max-code-quality:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     name: MAX code-quality
     runs-on: ubuntu-latest
     steps:
@@ -86,9 +143,10 @@ jobs:
   # Changed-line coverage: every line a PR touches must be covered.
   # ===========================================================================
   changed-line-coverage:
+    needs: changes
     name: Changed-line coverage (100%)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -133,8 +191,9 @@ jobs:
   # Canary for #427: exercise the public reusable gate without changing the
   # blocking pull-request path until its first real consumer run is green.
   reusable-canary:
+    needs: changes
     name: Reusable gate canary
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && github.event_name == 'workflow_dispatch' }}
     # Pin the current reusable gate revision. The previous pin referenced a
     # retired scanner binary and failed during the canary (#519).
     uses: paul007ex/breachsafe-golden-python/.github/workflows/quality-gates-python.yml@8cb20e182307847f67b3daf5bbe2be1b4195f465 # v1

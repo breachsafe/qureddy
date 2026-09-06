@@ -46,6 +46,9 @@ jobs:
         with:
           python-version: "3.14"
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      # buildx, so the build below can read the registry layer cache. Plain
+      # `docker build` cannot.
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       # Single source of truth: [project] version in pyproject.toml. The Dockerfile
       # COPYs dist/breachsafe_qureddy-<version>-*.whl and its ARG QUREDDY_VERSION.
       # The workflow still resolves the version from package metadata so manual
@@ -61,8 +64,14 @@ jobs:
       # so no host `python -m build` prestep is needed.
       - name: Build image
         run: |
-          docker build \
+          # Read the publish job's registry layer cache so a PR reuses layers instead
+          # of rebuilding from the base every time. Read-only and unauthenticated: the
+          # package is public, and a fork PR has no ghcr write credential. A cache miss
+          # is not an error.
+          docker buildx build \
             --build-arg "QUREDDY_VERSION=${QUREDDY_VERSION}" \
+            --cache-from "type=registry,ref=ghcr.io/breachsafe/qureddy:buildcache-amd64" \
+            --load \
             --tag qureddy-container:smoke .
       - name: Verify version banner
         run: |
@@ -172,6 +181,8 @@ jobs:
             --platform "linux/${{ matrix.arch }}" \
             --build-arg "QUREDDY_VERSION=${QUREDDY_VERSION}" \
             --provenance=true --sbom=true \
+            --cache-from "type=registry,ref=ghcr.io/breachsafe/qureddy:buildcache-${{ matrix.arch }}" \
+            --cache-to "type=registry,ref=ghcr.io/breachsafe/qureddy:buildcache-${{ matrix.arch }},mode=max" \
             --metadata-file "$RUNNER_TEMP/meta.json" \
             --output "type=image,name=ghcr.io/breachsafe/qureddy,push-by-digest=true,name-canonical=true,push=true" \
             .
