@@ -89,15 +89,15 @@ def add_algorithm_components(
     )
 
 
-def _cipher_suite_properties(suite: str) -> AlgorithmProperties | None:
-    """AEAD algorithmProperties for a TLS 1.3 cipher suite, keyed by classical bits.
+def _cipher_suite_properties(suite: str) -> AlgorithmProperties:
+    """Build TLS 1.3 properties, retaining unknown suites as explicit unknown assets.
 
     Classification is shared with the legacy TLS and SSH cipher emitters (#315).
     """
-    bits = cipher_classical_bits(suite)
-    if bits is None:
-        return None
-    return AlgorithmProperties(primitive=cipher_primitive(suite), classical_security_level=bits)
+    return AlgorithmProperties(
+        primitive=cipher_primitive(suite),
+        classical_security_level=cipher_classical_bits(suite),
+    )
 
 
 def add_cipher_suite_components(

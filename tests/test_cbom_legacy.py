@@ -71,10 +71,40 @@ def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
         ("CAMELLIA256-SHA", "block-cipher"),
         # No CycloneDX primitive describes "encrypts nothing".
         ("NULL-MD5", "other"),
+        ("FUTURE-CIPHER-999", "unknown"),
     ],
 )
 def test_legacy_cipher_primitive(name: str, primitive: str) -> None:
     assert cipher_primitive(name).value == primitive
+
+
+def test_unrecognized_cipher_primitive_is_explicitly_unknown() -> None:
+    assert cipher_primitive("FUTURE-CIPHER-999").value == "unknown"
+
+
+def test_unrecognized_tls_cipher_suite_is_retained_in_cbom() -> None:
+    base = _build_result()
+    evidence = Evidence(
+        id="unknown-suite",
+        asset_id=base.assets[0].id,
+        evidence_type="tls.negotiation",
+        observation_type=ObservationType.NEGOTIATED,
+        source="qureddy.scanners.tls",
+        protocol_version="TLSv1.3",
+        cipher_suite="FUTURE-CIPHER-999",
+        negotiated_group="X25519",
+    )
+    result = base.model_copy(update={"evidence": (*base.evidence, evidence)})
+    stream = io.StringIO()
+    render_cbom(result, stream)
+    component = next(
+        item
+        for item in json.loads(stream.getvalue())["components"]
+        if item["name"] == "FUTURE-CIPHER-999"
+    )
+    properties = component["cryptoProperties"]["algorithmProperties"]
+    assert properties["primitive"] == "unknown"
+    assert "classicalSecurityLevel" not in properties
 
 
 def test_legacy_cipher_properties_carries_classical_level_never_quantum() -> None:

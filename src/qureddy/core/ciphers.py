@@ -124,7 +124,7 @@ def cipher_classical_bits(name: str) -> int | None:
 
 
 def cipher_primitive(name: str) -> str:
-    """Return the protocol-neutral primitive vocabulary for a symmetric cipher."""
+    """Return the protocol-neutral primitive, or ``unknown`` for an unrecognized name."""
     lowered = name.lower()
     # A NULL suite encrypts nothing, so no cipher primitive describes it. The
     # CycloneDX enum has no "none" member, so "other" is the projection.
@@ -134,7 +134,12 @@ def cipher_primitive(name: str) -> str:
         return "ae"
     if "rc4" in lowered or "arcfour" in lowered:
         return "stream-cipher"
-    return "block-cipher"
+    if any(
+        family in lowered
+        for family in ("aes", "camellia", "aria", "chacha20", "seed", "idea", "rc2", "des")
+    ):
+        return "block-cipher"
+    return "unknown"
 
 
 def has_weak_cipher(accepted_ciphers: tuple[str, ...]) -> bool:
