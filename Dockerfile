@@ -42,7 +42,7 @@ RUN python -m build --wheel --no-isolation --outdir /tmp/wheel
 
 FROM python:3.14-slim-bookworm@sha256:9ab8d9c8514b44f90cf0029dd42fdd7e9e211e639c8b995304cc04568dee900f
 
-ARG QUREDDY_VERSION=0.9.12
+ARG QUREDDY_VERSION=0.9.13
 ARG IKE_SCAN_VERSION=1.9.5-1+b1
 ARG OPENSSL_VERSION=3.5.8
 LABEL org.opencontainers.image.title="QuReddy" \
