@@ -22,16 +22,11 @@ from qureddy.scanners.ike.adapter import IkeScanAdapter
 from qureddy.scanners.ike.parser import parse_ike_scan_output
 from qureddy.scanners.ike.scanner import IKEScanner
 from qureddy.scanners.ike.types import IKEMode, IKEParseStatus
+from tests.ike_lab._guard import LabOutcome, evaluate_lab
 
 
 def _unmet(reason: str) -> NoReturn:
-    """Report an absent lab precondition as skipped, not failed (#740).
-
-    ``QUREDDY_IKE_LAB_REQUIRED=1`` turns the skip back into a failure, so a
-    configured lab cannot pass by quietly skipping the suite it exists to run.
-    """
-    if os.environ.get("QUREDDY_IKE_LAB_REQUIRED") == "1":
-        pytest.fail(f"{reason} (QUREDDY_IKE_LAB_REQUIRED=1)")
+    """Report an absent lab precondition as skipped, not failed (#740)."""
     pytest.skip(reason)
 
 
@@ -56,17 +51,17 @@ def live_responder() -> None:
     ``ike-scan`` against loopback on matching source and destination ports gets
     its own request back when nothing is bound to UDP/500, so tool presence does
     not prove a responder exists. UDP/500 is privileged, which rules out a bind
-    probe, so the check is the product's own classification: an unbound header
-    yields no ``ike.mode.responded`` evidence.
+    probe, so the check is the product's own classification. ``evaluate_lab``
+    holds that decision and is unit tested in the hermetic lane.
     """
     scanner = IKEScanner(IkeScanAdapter(_ike_scan_path()))
     result = scanner.scan(parse_ike_target(_target()), timeout_seconds=2)
-    if any(record.evidence_type == "ike.mode.responded" for record in result.evidence):
+    verdict = evaluate_lab(result.evidence, status=result.scan.status, target=_target())
+    if verdict.outcome is LabOutcome.RUN:
         return
-    _unmet(
-        f"no authorized IKE responder answered {_target()}:500 "
-        f"(scan status {result.scan.status}); start the lab responder to run this suite"
-    )
+    if verdict.outcome is LabOutcome.FAIL:
+        pytest.fail(verdict.reason)
+    _unmet(verdict.reason)
 
 
 @pytest.fixture(scope="module")
