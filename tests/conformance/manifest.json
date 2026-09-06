@@ -68,7 +68,7 @@
     "p7-leaf-cert": {
       "kind": "positive",
       "classification": "captured",
-      "sha256": "d0d52fba5cd47590d89493c7ac496f118c39e753fa51be3c29340fae8afda5ea",
+      "sha256": "4668bfcec7a0700059d5570739533065126e7e5c8ac03892cb9c3d662fc1d514",
       "official_rejects": false,
       "cli_rejects": false,
       "semantic_rejects": false

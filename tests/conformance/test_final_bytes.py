@@ -9,7 +9,7 @@ import json
 import pytest
 
 from qureddy.core.certificate import CertificateObservation
-from qureddy.core.models import Evidence, ObservationType
+from qureddy.core.models import Evidence, ObservationType, ScanTarget
 from tests._cbom_fixtures import _build_result, _render
 from tests.conformance.harness import (
     FIXTURE_DIR,
@@ -157,6 +157,17 @@ def test_certificate_fixture_matches_current_emitter() -> None:
         public_key_bits=256,
     )
     result = _build_result()
+    result = result.model_copy(
+        update={
+            "target": ScanTarget(
+                original_input="github.com",
+                host="github.com",
+                port=443,
+                sni="github.com",
+                locator="tls://github.com:443",
+            )
+        }
+    )
     evidence = Evidence(
         id="ev-cert",
         asset_id="asset-1",

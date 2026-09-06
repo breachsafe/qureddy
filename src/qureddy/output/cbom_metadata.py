@@ -22,7 +22,9 @@ from qureddy.output.cbom_assets import (
     protocol_ref,
     verdict_pairs,
 )
+from qureddy.output.cbom_components import CERTIFICATE_REF
 from qureddy.output.cbom_interpretation import add_interpretation_properties
+from qureddy.output.cbom_public_key import classify_public_key
 
 if TYPE_CHECKING:
     from cyclonedx.model.bom import Bom
@@ -193,10 +195,26 @@ def evidence_occurrences(
             # the endpoint so every evidence item maps to an occurrence — no silent drop.
             ref = ENDPOINT_REF
         fields = _provenance_fields(evidence, name, reproducible=reproducible)
-        occurrences.setdefault(ref, []).append(
-            {"location": result.target.locator, "additionalContext": "; ".join(fields)}
-        )
+        occurrence = {"location": result.target.locator, "additionalContext": "; ".join(fields)}
+        for occurrence_ref in _occurrence_refs(evidence, ref):
+            entries = occurrences.setdefault(occurrence_ref, [])
+            if occurrence not in entries:
+                entries.append(occurrence)
     return occurrences
+
+
+def _occurrence_refs(evidence: Evidence, default_ref: str) -> tuple[str, ...]:
+    """Return each emitted asset ref described by one evidence record (#796)."""
+    certificate = evidence.certificate_record
+    if certificate is None:
+        return (default_ref,)
+    refs = [CERTIFICATE_REF]
+    if certificate.signature_algorithm != "UNKNOWN":
+        refs.append(algorithm_ref(certificate.signature_algorithm))
+    public_key = classify_public_key(certificate.public_key_algorithm, certificate.public_key_bits)
+    if public_key is not None:
+        refs.append(algorithm_ref(public_key.name))
+    return tuple(dict.fromkeys(refs))
 
 
 def _provenance_fields(evidence: Evidence, name: str | None, *, reproducible: bool) -> list[str]:

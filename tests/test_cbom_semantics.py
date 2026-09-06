@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from qureddy.core.certificate import CertificateObservation
 from qureddy.core.errors import CbomError
 from qureddy.core.models import Evidence, ObservationType
 from qureddy.output.cbom_semantics import validate_cbom_semantics
@@ -189,6 +190,49 @@ class TestOccurrenceProvenanceGrammar:
             assert occurrence["location"] == "tls://example.com:443"
             fields = _parse_occurrence_context(occurrence["additionalContext"])
             assert fields["source"] == "qureddy.scanners.tls.parse"
+
+    def test_identical_occurrences_are_deduplicated(self) -> None:
+        base = _build_result()
+        evidence = base.evidence[0]
+        payload = _render(base.model_copy(update={"evidence": (evidence, evidence)}))
+        occurrences = next(
+            component["evidence"]["occurrences"]
+            for component in payload["components"]
+            if component["bom-ref"] == "crypto/algorithm/x25519mlkem768"
+        )
+        assert len(occurrences) == 1
+
+    def test_certificate_evidence_reaches_certificate_and_related_algorithms(self) -> None:
+        base = _build_result()
+        certificate = CertificateObservation(
+            subject="CN=example.com",
+            issuer="CN=issuer",
+            not_before="Jul  3 00:00:00 2026 GMT",
+            not_after="Sep 30 23:59:59 2026 GMT",
+            serial="ABC",
+            signature_algorithm="ecdsa-with-SHA256",
+            public_key_summary="Public Key Algorithm: id-ecPublicKey",
+            is_self_signed=False,
+            is_post_quantum_signature=False,
+            public_key_algorithm="id-ecPublicKey",
+            public_key_bits=256,
+        )
+        evidence = Evidence(
+            id="ev-cert",
+            asset_id="asset-1",
+            evidence_type="tls.cert.signature",
+            observation_type=ObservationType.OBSERVED,
+            source="qureddy.scanners.tls.cert_sig",
+            certificate_record=certificate,
+        )
+        payload = _render(base.model_copy(update={"evidence": (evidence,)}))
+        components = {item["bom-ref"]: item for item in payload["components"]}
+        for ref in (
+            "crypto/certificate/leaf",
+            "crypto/algorithm/ec-256",
+            "crypto/algorithm/ecdsa-with-sha256",
+        ):
+            assert components[ref]["evidence"]["occurrences"]
 
     def test_subjectless_evidence_attaches_to_endpoint(self) -> None:
         # #326: evidence with no crypto subject (a bare cert/failure record) is no longer
