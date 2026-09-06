@@ -58,3 +58,36 @@ def test_legacy_runtime_resolver_records_missing_when_binary_fails(
     path, dependency = resolver.resolve_legacy_openssl(str(binary), timeout_seconds=1)
     assert path is None
     assert dependency.failure_category is not None
+
+
+def test_legacy_canonical_environment_variable_wins_over_alias(tmp_path: Path, monkeypatch) -> None:
+    canonical = tmp_path / "canonical-openssl"
+    alias = tmp_path / "alias-openssl"
+    for binary in (canonical, alias):
+        binary.write_text("fixture")
+        binary.chmod(0o755)
+    monkeypatch.setenv("QUREDDY_OPENSSL_WEAK_CIPHERS_BIN", str(canonical))
+    monkeypatch.setenv("QUREDDY_LEGACY_OPENSSL", str(alias))
+    monkeypatch.setattr(
+        resolver, "run_openssl", lambda *_args, **_kwargs: "OpenSSL 1.0.2u 20 Dec 2019"
+    )
+
+    path, _ = resolver.resolve_legacy_openssl(timeout_seconds=1)
+
+    assert path == str(canonical)
+
+
+def test_legacy_environment_alias_remains_supported(tmp_path: Path, monkeypatch) -> None:
+    binary = tmp_path / "alias-openssl"
+    binary.write_text("fixture")
+    binary.chmod(0o755)
+    monkeypatch.delenv("QUREDDY_OPENSSL_WEAK_CIPHERS_BIN", raising=False)
+    monkeypatch.setenv("QUREDDY_LEGACY_OPENSSL", str(binary))
+    monkeypatch.setattr(
+        resolver, "run_openssl", lambda *_args, **_kwargs: "OpenSSL 1.0.2u 20 Dec 2019"
+    )
+
+    path, dependency = resolver.resolve_legacy_openssl(timeout_seconds=1)
+
+    assert path == str(binary)
+    assert dependency.version == "1.0.2u"

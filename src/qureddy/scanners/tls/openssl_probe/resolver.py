@@ -37,6 +37,8 @@ from qureddy.scanners.tls.openssl_probe._constants import (
     OPENSSL_LTS_FORMULA,
     OPENSSL_LTS_LABEL,
     PINNED_OPENSSL_VERSION,
+    PQC_ENV_ALIAS,
+    WEAK_CIPHERS_ENV_ALIAS,
 )
 
 
@@ -161,7 +163,7 @@ def resolve_openssl_with_capability(
     explicit: str | None, *, timeout_seconds: int = 30
 ) -> tuple[str, OpenSSLDependency]:
     """Resolve and return a path plus its single canonical capability result."""
-    override = explicit or os.environ.get(ENV_OVERRIDE)
+    override = explicit or os.environ.get(ENV_OVERRIDE) or os.environ.get(PQC_ENV_ALIAS)
     if override:
         if not Path(override).is_file() or not os.access(override, os.X_OK):
             raise LocalOpenSSLMissing(
@@ -206,7 +208,9 @@ def resolve_legacy_openssl(
     explicit: str | None = None, *, timeout_seconds: int = 30
 ) -> tuple[str | None, OpenSSLDependency]:
     """Discover the optional legacy runtime for compatibility cipher probes."""
-    override = explicit or os.environ.get(LEGACY_ENV_OVERRIDE)
+    override = (
+        explicit or os.environ.get(LEGACY_ENV_OVERRIDE) or os.environ.get(WEAK_CIPHERS_ENV_ALIAS)
+    )
     candidates = (
         [override]
         if override

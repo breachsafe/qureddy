@@ -73,7 +73,9 @@ Docker Hub applies limits to unauthenticated pulls. Authenticate with
 limited.
 
 The image includes the TLS and IKE collectors. Host OpenSSL, `ike-scan`, and a
-`QUREDDY_OPENSSL` setting are unnecessary inside the container.
+`QUREDDY_OPENSSL` setting are unnecessary inside the container. The image
+also exposes `openssl-pqc` and `openssl-weak-ciphers` as explicit PATH names;
+the default `openssl` remains the PQC-capable 3.5.x binary.
 
 ## 2. Run a TLS scan
 

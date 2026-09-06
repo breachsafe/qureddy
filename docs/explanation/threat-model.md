@@ -38,8 +38,9 @@ The Python interpreter, installed package, dependencies, operating system,
 network resolver, selected OpenSSL binary, and selected `ike-scan` binary are
 trusted.
 
-TLS collector selection is explicit: `--openssl`, then `QUREDDY_OPENSSL`, then
-`openssl` on `PATH`. A malicious or replaced binary can fabricate output or
+TLS collector selection is explicit: `--openssl`, then `QUREDDY_OPENSSL_PQC_BIN`,
+then the `QUREDDY_OPENSSL` compatibility alias, then `openssl` on `PATH`. A
+malicious or replaced binary can fabricate output or
 execute with the operator's privileges. QuReddy checks capability and records
 path, version, subprocess digests, and bounded excerpts; it cannot establish
 the binary's supply-chain integrity at runtime.
