@@ -12,29 +12,47 @@ versions follow [PEP 440](https://peps.python.org/pep-0440/).
 ## Contents
 
 1. [Unreleased](#unreleased)
-2. [0.9.10](#0910---2026-09-06)
-3. [0.9.9](#099---2026-09-04)
-4. [0.9.8](#098---2026-09-02)
-5. [0.9.7](#097---2026-09-02)
-6. [0.9.6](#096---2026-09-02)
-7. [0.9.5](#095---2026-09-02)
-8. [0.9.4](#094---2026-09-02)
-9. [0.9.3](#093---2026-09-01)
-10. [0.9.2](#092---2026-09-01)
-11. [0.9.1](#091---2026-08-31)
-12. [0.9.0.10](#09010---2026-08-30)
-13. [0.9.0.9](#0909---2026-08-26)
-14. [0.9.0.8](#0908---2026-08-26)
-15. [0.9.0.7](#0907---2026-08-26)
-16. [0.9.0.6](#0906---2026-08-26)
-17. [0.9.0.5](#0905---2026-08-26)
-18. [0.9.0.4](#0904---2026-08-26)
-19. [0.9.0.3](#0903---2026-08-25)
-20. [0.9.0.2](#0902---2026-08-25)
-21. [0.9.0.1](#0901---2026-08-24)
-22. [0.9.0.0](#0900---2026-08-24)
+2. [0.9.11](#0911---2026-09-06)
+3. [0.9.10](#0910---2026-09-06)
+4. [0.9.9](#099---2026-09-04)
+5. [0.9.8](#098---2026-09-02)
+6. [0.9.7](#097---2026-09-02)
+7. [0.9.6](#096---2026-09-02)
+8. [0.9.5](#095---2026-09-02)
+9. [0.9.4](#094---2026-09-02)
+10. [0.9.3](#093---2026-09-01)
+11. [0.9.2](#092---2026-09-01)
+12. [0.9.1](#091---2026-08-31)
+13. [0.9.0.10](#09010---2026-08-30)
+14. [0.9.0.9](#0909---2026-08-26)
+15. [0.9.0.8](#0908---2026-08-26)
+16. [0.9.0.7](#0907---2026-08-26)
+17. [0.9.0.6](#0906---2026-08-26)
+18. [0.9.0.5](#0905---2026-08-26)
+19. [0.9.0.4](#0904---2026-08-26)
+20. [0.9.0.3](#0903---2026-08-25)
+21. [0.9.0.2](#0902---2026-08-25)
+22. [0.9.0.1](#0901---2026-08-24)
+23. [0.9.0.0](#0900---2026-08-24)
 
 ## Unreleased
+
+## [0.9.11] - 2026-09-06
+
+### Changed
+
+- The container no longer compiles OpenSSL. Both the 3.5.8 build and the legacy 1.0.2u
+  build now come from the pinned toolchain image
+  `ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5`, which carries them and
+  publishes them once per version bump. Two from-source stages left the Dockerfile
+  ([PR #802](https://github.com/BreachSAFE/qureddy/pull/802)). A build-time check asserts
+  the arriving OpenSSL versions match what the image labels claim, and that
+  `X25519MLKEM768` is present, so a series tag cannot ship a version the labels contradict.
+- CI runs the expensive gates only when a change is not documentation-only, using a
+  `changes` job with per-job conditions rather than a workflow-level `paths-ignore`, which
+  would have left required checks unreported and blocked every documentation pull request.
+  Container builds now reuse a registry layer cache
+  ([PR #803](https://github.com/BreachSAFE/qureddy/pull/803)).
 
 ## [0.9.10] - 2026-09-06
 
