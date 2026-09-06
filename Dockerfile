@@ -14,7 +14,7 @@
 #
 # Source: paul007ex/breachsafe-container. Its python lane is python:3.14-slim-bookworm,
 # the same base as the final stage below, so these binaries link the same libc.
-FROM ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5 AS openssl-src
+FROM ghcr.io/paul007ex/breachsafe-container:3.14-openssl3.5@sha256:15eb1539a7a0045b6eaae18d636802c34d1ec8dde12f7814dd4d6dd6689fd285 AS openssl-src
 
 # Build the wheel from source inside the image (#253) so a fresh `docker build .`
 # needs no host-built dist/ artifact. hatchling reads the static version from
@@ -66,14 +66,18 @@ ENV QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
 # 3.5.x build is `shared`: without LD_LIBRARY_PATH the binary produces no output and
 # the comparison silently sees an empty string.
 RUN set -eu; \
-    got="$(/opt/openssl/bin/openssl version | cut -d' ' -f2)"; \
+    version="$(/opt/openssl/bin/openssl version)"; \
+    got="${version#OpenSSL }"; \
+    got="${got%% *}"; \
     [ "$got" = "${OPENSSL_VERSION}" ] || { \
       echo "base image ships OpenSSL $got, labels claim ${OPENSSL_VERSION}" >&2; exit 1; }; \
-    got_legacy="$(/opt/openssl-legacy/bin/openssl version | cut -d' ' -f2)"; \
+    legacy_version="$(/opt/openssl-legacy/bin/openssl version)"; \
+    got_legacy="${legacy_version#OpenSSL }"; \
+    got_legacy="${got_legacy%% *}"; \
     [ "$got_legacy" = "1.0.2u" ] || { \
       echo "base image ships legacy OpenSSL $got_legacy, labels claim 1.0.2u" >&2; exit 1; }; \
-    /opt/openssl/bin/openssl list -tls1_3 -tls-groups | grep -q X25519MLKEM768 \
-      || { echo "base OpenSSL lacks X25519MLKEM768" >&2; exit 1; }
+    groups="$(/opt/openssl/bin/openssl list -tls1_3 -tls-groups)"; \
+    case "$groups" in *X25519MLKEM768*) ;; *) echo "base OpenSSL lacks X25519MLKEM768" >&2; exit 1 ;; esac
 
 RUN addgroup --gid 1000 qureddy \
     && adduser --uid 1000 --gid 1000 --disabled-password --gecos "" qureddy \
