@@ -234,6 +234,24 @@ def test_unexpected_resolver_error_is_wrapped_as_missing(
         resolver.resolve_openssl_with_capability(str(explicit))
 
 
+def test_primary_canonical_environment_variable_wins_over_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    canonical = tmp_path / "canonical-openssl"
+    alias = tmp_path / "alias-openssl"
+    for binary in (canonical, alias):
+        binary.write_text("fixture")
+        binary.chmod(0o755)
+    dependency = OpenSSLDependency(path=str(canonical), version="3.5.7")
+    monkeypatch.setenv("QUREDDY_OPENSSL_PQC_BIN", str(canonical))
+    monkeypatch.setenv("QUREDDY_OPENSSL", str(alias))
+    monkeypatch.setattr(resolver, "_validate_candidate", lambda path, _timeout: dependency)
+
+    path, _ = resolver.resolve_openssl_with_capability(None)
+
+    assert path == str(canonical)
+
+
 def test_no_usable_discovered_candidate_is_typed_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("QUREDDY_OPENSSL", raising=False)
     monkeypatch.setattr(resolver, "_candidate_paths", lambda: [])

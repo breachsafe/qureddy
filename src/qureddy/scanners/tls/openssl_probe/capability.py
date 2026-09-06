@@ -40,7 +40,7 @@ from qureddy.scanners.tls.openssl_probe.resolver import (
 _INSTALL_GUIDANCE = (
     f"pip installs QuReddy, not OpenSSL. Install a checksum-verified OpenSSL {OPENSSL_LTS_LABEL} "  # noqa: S608  # nosec B608 -- operator guidance, not SQL
     f"LTS build separately (validated baseline: {PINNED_OPENSSL_VERSION}), then pass "
-    "--openssl PATH or set QUREDDY_OPENSSL. macOS: the Homebrew openssl@3.5 formula is "
+    "--openssl PATH or set QUREDDY_OPENSSL_PQC_BIN. macOS: the Homebrew openssl@3.5 formula is "
     "a moving channel; select it only after `openssl version` reports a supported 3.5.x "
     "release for the executable and any explicitly reported linked library. Linux: install "
     "OpenSSL 3.5.x LTS from your distribution or trusted vendor. Windows: install a "

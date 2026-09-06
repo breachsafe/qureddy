@@ -126,7 +126,7 @@ Export the candidate only when the executable and any explicitly reported
 `X25519MLKEM768`:
 
 ```bash
-export QUREDDY_OPENSSL="$QUREDDY_OPENSSL_CANDIDATE"
+export QUREDDY_OPENSSL_PQC_BIN="$QUREDDY_OPENSSL_CANDIDATE"
 ```
 
 If the formula has moved, use the repository's
@@ -231,14 +231,15 @@ Do not install into the operating system's managed Python environment.
 QuReddy resolves the collector binary in this order:
 
 1. `--openssl PATH`
-2. `QUREDDY_OPENSSL`
-3. `openssl` on `PATH`
+2. `QUREDDY_OPENSSL_PQC_BIN`
+3. `QUREDDY_OPENSSL` (compatibility alias)
+4. `openssl` on `PATH`
 
 Confirm both the version and required group:
 
 ```bash
-"${QUREDDY_OPENSSL:-openssl}" version
-"${QUREDDY_OPENSSL:-openssl}" list -tls1_3 -tls-groups
+"${QUREDDY_OPENSSL_PQC_BIN:-${QUREDDY_OPENSSL:-openssl}}" version
+"${QUREDDY_OPENSSL_PQC_BIN:-${QUREDDY_OPENSSL:-openssl}}" list -tls1_3 -tls-groups
 ```
 
 The selected binary must report exactly OpenSSL 3.5.7 and list

@@ -143,8 +143,13 @@ ENVIRONMENT:
 NO_COLOR         Disable ANSI color (https://no-color.org).
 
 \b
-QUREDDY_OPENSSL  Override path to an OpenSSL 3.5.x LTS binary
-                 (precedence: --openssl > $QUREDDY_OPENSSL > $PATH).
+QUREDDY_OPENSSL_PQC_BIN
+                 Override the primary OpenSSL 3.5.x LTS binary
+                 (precedence: --openssl > $QUREDDY_OPENSSL_PQC_BIN >
+                 $QUREDDY_OPENSSL > $PATH).
+QUREDDY_OPENSSL_WEAK_CIPHERS_BIN
+                 Override the OpenSSL 1.0.2u weak-cipher binary
+                 (legacy alias: $QUREDDY_LEGACY_OPENSSL).
 
 Project: {PROJECT_URL}
 """)

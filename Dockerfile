@@ -67,7 +67,9 @@ RUN apt-get update \
     && test -r /usr/share/doc/ike-scan/copyright \
     && rm -rf /var/lib/apt/lists/*
 
-ENV QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
+ENV QUREDDY_OPENSSL_PQC_BIN=/opt/openssl/bin/openssl \
+    QUREDDY_OPENSSL_WEAK_CIPHERS_BIN=/opt/openssl-legacy/bin/openssl \
+    QUREDDY_OPENSSL=/opt/openssl/bin/openssl \
     QUREDDY_LEGACY_OPENSSL=/opt/openssl-legacy/bin/openssl \
     LD_LIBRARY_PATH=/opt/openssl/lib64:/opt/openssl/lib \
     PATH=/opt/openssl/bin:$PATH
@@ -91,6 +93,11 @@ RUN set -eu; \
       echo "base image ships legacy OpenSSL $got_legacy, labels claim 1.0.2u" >&2; exit 1; }; \
     groups="$(/opt/openssl/bin/openssl list -tls1_3 -tls-groups)"; \
     case "$groups" in *X25519MLKEM768*) ;; *) echo "base OpenSSL lacks X25519MLKEM768" >&2; exit 1 ;; esac
+
+# Keep both capability lanes directly addressable without putting the legacy
+# binary ahead of the default `openssl` on PATH.
+RUN ln -s /opt/openssl/bin/openssl /usr/local/bin/openssl-pqc \
+    && ln -s /opt/openssl-legacy/bin/openssl /usr/local/bin/openssl-weak-ciphers
 
 RUN addgroup --gid 1000 qureddy \
     && adduser --uid 1000 --gid 1000 --disabled-password --gecos "" qureddy \

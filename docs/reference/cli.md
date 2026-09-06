@@ -280,12 +280,15 @@ See the [exit code reference](exit-codes.md) for branching examples.
 
 | Variable | Scope | Meaning |
 | --- | --- | --- |
-| `QUREDDY_OPENSSL` | TLS | OpenSSL path used when `--openssl` is absent |
+| `QUREDDY_OPENSSL_PQC_BIN` | TLS | Primary OpenSSL 3.5.x path used when `--openssl` is absent |
+| `QUREDDY_OPENSSL_WEAK_CIPHERS_BIN` | TLS | OpenSSL 1.0.2u path for weak-cipher compatibility probes |
+| `QUREDDY_OPENSSL` / `QUREDDY_LEGACY_OPENSSL` | TLS | Compatibility aliases for the two canonical path variables |
 | `QUREDDY_BLOCK_INTERNAL_TARGETS` | TLS, SSH, and IKE | Set to `1` to reject literal internal, loopback, link-local, reserved, multicast, unspecified, and known metadata-hostname targets before probing |
 | `NO_COLOR` | Rich output and logs | Any value disables ANSI color |
 
-OpenSSL selection order is `--openssl`, then `QUREDDY_OPENSSL`, then
-`openssl` on `PATH`.
+Primary OpenSSL selection order is `--openssl`, then
+`QUREDDY_OPENSSL_PQC_BIN`, then the `QUREDDY_OPENSSL` compatibility alias,
+then `openssl` on `PATH`.
 
 ## 11. Related documentation
 

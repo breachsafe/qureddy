@@ -243,7 +243,7 @@ Export the candidate only when the executable and any explicitly reported
 `X25519MLKEM768`:
 
 ```bash
-export QUREDDY_OPENSSL="$QUREDDY_OPENSSL_CANDIDATE"
+export QUREDDY_OPENSSL_PQC_BIN="$QUREDDY_OPENSSL_CANDIDATE"
 qureddy scan tls --help
 ```
 
@@ -259,8 +259,9 @@ openssl version
 openssl list -tls1_3 -tls-groups
 ```
 
-If `openssl` is not the intended binary, set `QUREDDY_OPENSSL` or pass
-`--openssl PATH`. The [installation guide](docs/how-to/install.md) documents
+If `openssl` is not the intended binary, set `QUREDDY_OPENSSL_PQC_BIN` or pass
+`--openssl PATH`. `QUREDDY_OPENSSL` remains a compatibility alias. The
+[installation guide](docs/how-to/install.md) documents
 the supported resolution order and failure diagnostics.
 
 ## 5. Run the first TLS scan

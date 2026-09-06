@@ -246,7 +246,7 @@ def unknown_recommendation(failure: FailureCategory | None) -> str:
             "The openssl on this machine is LibreSSL, not OpenSSL — macOS ships "
             "LibreSSL as /usr/bin/openssl by default. Install a checksum-verified "
             "OpenSSL 3.5.x LTS build and select it with --openssl PATH or "
-            "QUREDDY_OPENSSL. Homebrew openssl@3.5 is a moving channel; use it only "
+            "QUREDDY_OPENSSL_PQC_BIN. Homebrew openssl@3.5 is a moving channel; use it only "
             "after `openssl version` reports a supported 3.5.x for the executable and any explicitly "
             "reported linked library."
         )
