@@ -37,7 +37,7 @@ from qureddy.core.status import STATUS_COMPLETED
 from qureddy.scanners.common.metadata import build_scan_metadata
 from qureddy.scanners.tls._cert_findings import (
     evidence_from_certificate,
-    finding_from_certificate,
+    findings_from_certificate,
 )
 from qureddy.scanners.tls._evidence import build_asset, evidence_from_probe
 from qureddy.scanners.tls._legacy_findings import (
@@ -128,7 +128,7 @@ def _collect_optional_axes(
         )
         evidence.extend(compatibility_evidence)
         findings.extend(compatibility_findings)
-    cert_evidence, cert_finding = scanner._collect_cert_evidence(  # noqa: SLF001
+    cert_evidence, cert_findings = scanner._collect_cert_evidence(  # noqa: SLF001
         target=target,
         asset=asset,
         openssl_path=openssl_path,
@@ -136,8 +136,7 @@ def _collect_optional_axes(
         starttls=scanner.starttls,
     )
     evidence.append(cert_evidence)
-    if cert_finding is not None:
-        findings.append(cert_finding)
+    findings.extend(cert_findings)
     return len(legacy_evidence) + 1
 
 
@@ -368,7 +367,8 @@ class TLSScanner(Scanner[ScanTarget]):
         openssl_path: str,
         timeout_seconds: int,
         starttls: StartTLSMode | None = None,
-    ) -> tuple[Evidence, Finding | None]:
+        now: datetime | None = None,
+    ) -> tuple[Evidence, tuple[Finding, ...]]:
         """Collect certificate evidence without making it a scan prerequisite."""
         log = get_logger(__name__)
         log.info("probe.phase.start", phase="certificate")
@@ -392,9 +392,9 @@ class TLSScanner(Scanner[ScanTarget]):
         evidence = evidence_from_certificate(asset, certificate).model_copy(
             update={"certificate_pem": pem or None}
         )
-        finding = finding_from_certificate(asset, evidence, certificate)
+        findings = findings_from_certificate(asset, evidence, certificate, now=now)
         log.info("probe.phase.complete", phase="certificate", observed=certificate is not None)
-        return evidence, finding
+        return evidence, findings
 
     def _probe_with_retries(
         self,

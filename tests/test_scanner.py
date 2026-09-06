@@ -72,7 +72,7 @@ class TestTLSScannerOrchestration:
         monkeypatch.setattr(scanner, "_collect_evidence", lambda **_kwargs: ([], 0))
         monkeypatch.setattr(scanner, "_collect_legacy_evidence", lambda **_kwargs: ([], []))
 
-        def collect_cert(**kwargs: object) -> tuple[Evidence, None]:
+        def collect_cert(**kwargs: object) -> tuple[Evidence, tuple[Finding, ...]]:
             asset = kwargs["asset"]
             assert isinstance(asset, Asset)
             return (
@@ -83,7 +83,7 @@ class TestTLSScannerOrchestration:
                     observation_type=ObservationType.NOT_TESTABLE,
                     source="fixture",
                 ),
-                None,
+                (),
             )
 
         monkeypatch.setattr(scanner, "_collect_cert_evidence", collect_cert)
@@ -134,13 +134,13 @@ class TestTLSScannerOrchestration:
         target = self._target()
         asset = build_asset(target)
         monkeypatch.setattr(scanner_module, "fetch_certificate_pem", lambda *_args, **_kwargs: "")
-        evidence, finding = TLSScanner._collect_cert_evidence(  # noqa: SLF001
+        evidence, findings = TLSScanner._collect_cert_evidence(  # noqa: SLF001
             target=target,
             asset=asset,
             openssl_path="/fixture/openssl",
             timeout_seconds=1,
         )
-        assert finding is None
+        assert findings == ()
         assert evidence.observation_type is ObservationType.NOT_TESTABLE
 
         certificate = CertificateInfo(
@@ -162,7 +162,7 @@ class TestTLSScannerOrchestration:
         monkeypatch.setattr(
             scanner_module, "parse_certificate", lambda *_args, **_kwargs: certificate
         )
-        evidence, finding = TLSScanner._collect_cert_evidence(  # noqa: SLF001
+        evidence, findings = TLSScanner._collect_cert_evidence(  # noqa: SLF001
             target=target,
             asset=asset,
             openssl_path="/fixture/openssl",
@@ -184,16 +184,59 @@ class TestTLSScannerOrchestration:
             "is_self_signed": False,
             "is_post_quantum_signature": False,
         }
-        assert finding is not None
-        assert finding.algorithm == "sha256WithRSAEncryption"
-        assert finding.primitive == "signature"
-        assert finding.nist_quantum_security_level == 0
+        assert len(findings) == 1
+        assert findings[0].algorithm == "sha256WithRSAEncryption"
+        assert findings[0].primitive == "signature"
+        assert findings[0].nist_quantum_security_level == 0
+
+        expired_md5 = replace(
+            certificate,
+            not_after="Jan 1 00:00:00 2007 GMT",
+            signature_algorithm="md5WithRSAEncryption",
+        )
+        monkeypatch.setattr(
+            scanner_module, "parse_certificate", lambda *_args, **_kwargs: expired_md5
+        )
+        evidence, findings = TLSScanner._collect_cert_evidence(  # noqa: SLF001
+            target=target,
+            asset=asset,
+            openssl_path="/fixture/openssl",
+            timeout_seconds=1,
+            now=datetime(2026, 9, 6, tzinfo=UTC),
+        )
+        assert evidence.observation_type is ObservationType.OBSERVED
+        assert {finding.finding_type for finding in findings} == {
+            "tls.cert.classical_signature",
+            "tls.cert.classical_signature_weak",
+            "tls.cert.expired",
+        }
+        assert {finding.severity for finding in findings} == {
+            Severity.INFO,
+            Severity.HIGH,
+            Severity.CRITICAL,
+        }
+
+        sha1_certificate = replace(
+            certificate,
+            signature_algorithm="sha1WithRSAEncryption",
+        )
+        monkeypatch.setattr(
+            scanner_module, "parse_certificate", lambda *_args, **_kwargs: sha1_certificate
+        )
+        _evidence, findings = TLSScanner._collect_cert_evidence(  # noqa: SLF001
+            target=target,
+            asset=asset,
+            openssl_path="/fixture/openssl",
+            timeout_seconds=1,
+            now=datetime(2026, 9, 6, tzinfo=UTC),
+        )
+        assert "tls.cert.classical_signature_weak" in {finding.finding_type for finding in findings}
 
         unknown_certificate = replace(certificate, signature_algorithm="vendorSignature42")
         monkeypatch.setattr(
             scanner_module, "parse_certificate", lambda *_args, **_kwargs: unknown_certificate
         )
-        evidence, finding = TLSScanner._collect_cert_evidence(  # noqa: SLF001
+        evidence, findings = TLSScanner._collect_cert_evidence(  # noqa: SLF001
             target=target,
             asset=asset,
             openssl_path="/fixture/openssl",
@@ -203,22 +246,34 @@ class TestTLSScannerOrchestration:
         assert evidence.primitive == "signature"
         assert evidence.parameter_set_identifier is None
         assert evidence.nist_quantum_security_level is None
-        assert finding is not None
-        assert finding.algorithm == "vendorSignature42"
-        assert finding.primitive == "signature"
-        assert finding.nist_quantum_security_level is None
+        assert len(findings) == 1
+        assert findings[0].algorithm == "vendorSignature42"
+        assert findings[0].primitive == "signature"
+        assert findings[0].nist_quantum_security_level is None
 
-        def missing_openssl(*_args: object, **_kwargs: object) -> str:
-            raise LocalOpenSSLMissing("fixture openssl missing")
-
-        monkeypatch.setattr(scanner_module, "fetch_certificate_pem", missing_openssl)
-        evidence, finding = TLSScanner._collect_cert_evidence(  # noqa: SLF001
+        unknown_certificate = replace(certificate, signature_algorithm="UNKNOWN")
+        monkeypatch.setattr(
+            scanner_module, "parse_certificate", lambda *_args, **_kwargs: unknown_certificate
+        )
+        _evidence, findings = TLSScanner._collect_cert_evidence(  # noqa: SLF001
             target=target,
             asset=asset,
             openssl_path="/fixture/openssl",
             timeout_seconds=1,
         )
-        assert finding is None
+        assert findings == ()
+
+        def missing_openssl(*_args: object, **_kwargs: object) -> str:
+            raise LocalOpenSSLMissing("fixture openssl missing")
+
+        monkeypatch.setattr(scanner_module, "fetch_certificate_pem", missing_openssl)
+        evidence, findings = TLSScanner._collect_cert_evidence(  # noqa: SLF001
+            target=target,
+            asset=asset,
+            openssl_path="/fixture/openssl",
+            timeout_seconds=1,
+        )
+        assert findings == ()
         assert evidence.observation_type is ObservationType.NOT_TESTABLE
 
 
