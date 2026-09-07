@@ -30,6 +30,7 @@ from tests.test_output import _build_result
         ("ECDHE-RSA-AES256-GCM-SHA384", 256),
         ("ECDHE-RSA-AES192-CBC-SHA", 192),
         ("ECDHE-RSA-AES128-SHA", 128),
+        ("ENCR_AES_CBC_128", 128),
         ("DES-CBC3-SHA", 112),
         ("ECDHE-RSA-CHACHA20-POLY1305", 256),
         # Families the OpenSSL 1.0.2u compatibility lane can negotiate and the

@@ -90,7 +90,10 @@ def _sized_family_bits(lowered: str, family: str) -> int | None:
             f"{family}{size}" in lowered
             or f"{family}-{size}" in lowered
             or f"{family}_{size}" in lowered
-            or (family in lowered and lowered.endswith(f"_{size}"))
+            or (
+                family in lowered
+                and (lowered.endswith(f"_{size}") or lowered.endswith(f"-{size}"))
+            )
         ):
             return size
     return None
