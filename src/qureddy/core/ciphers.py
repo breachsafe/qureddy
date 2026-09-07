@@ -101,7 +101,9 @@ _PRE_FAMILY_BITS: tuple[tuple[tuple[str, ...], int], ...] = (
     (("chacha20",), 256),
     (("exp1024",), 56),
     (("exp-", "export"), 40),
-    (("null",), 0),  # 0, not None, so the component stays rated
+    # NULL suites explicitly describe no confidentiality; retain a rated zero
+    # instead of treating the observation as an unknown algorithm.
+    (("null",), 0),
     (("3des", "des-cbc3"), 112),
 )
 
@@ -174,6 +176,10 @@ def cipher_classical_bits(name: str) -> int | None:
     names before their generic markers.
     """
     lowered = _normalise_cipher_name(name)
+    # SSH defines ``none`` as a complete algorithm identifier, not a family
+    # marker. Keep it exact so names such as ``hmac-none`` remain unknown.
+    if lowered == "none":
+        return 0
     bits = _first_marker_bits(lowered, _PRE_FAMILY_BITS)
     if bits is not None:
         return bits
@@ -192,6 +198,10 @@ def cipher_primitive(name: str) -> str:
     cipher family that this table did not establish.
     """
     lowered = _normalise_cipher_name(name)
+    # The shared table uses family substrings; SSH ``none`` is an exact alias
+    # for NULL and must not classify unrelated names containing that spelling.
+    if lowered == "none":
+        return "other"
     # A NULL suite encrypts nothing, so no cipher primitive describes it. The
     # CycloneDX enum has no "none" member, so "other" is the projection.
     return next(
@@ -212,5 +222,6 @@ def has_weak_cipher(accepted_ciphers: tuple[str, ...]) -> bool:
     policy response and finding text; this helper only matches the reviewed markers.
     """
     return any(
-        marker in cipher.upper() for cipher in accepted_ciphers for marker in WEAK_CIPHER_MARKERS
+        cipher.upper() == "NONE" or any(marker in cipher.upper() for marker in WEAK_CIPHER_MARKERS)
+        for cipher in accepted_ciphers
     )

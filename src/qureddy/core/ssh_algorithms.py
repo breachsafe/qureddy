@@ -1,6 +1,34 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE
 # SPDX-License-Identifier: Apache-2.0
-"""Classify an SSH offer into PQ / classical / weak posture. Pure functions."""
+"""Classify SSH algorithm offers into PQ, classical, and weak posture.
+
+This module is the pure classification layer between the SSH probe and the
+canonical evidence/CBOM adapters. It consumes the algorithm name-lists already
+collected by the probe; it does not open sockets, negotiate a session, or decide
+which offered algorithm a client will select.
+
+Classification ownership:
+
+    SSHOffer name-list
+    ├── KEX names       → shared PQ classifier + SSH weakness tables
+    ├── host-key names  → shared signature classifier + SSH weakness tables
+    ├── cipher names    → shared cipher primitive classifier + SSH notes
+    └── MAC names       → SSH weakness table + ``mac`` primitive
+
+The outputs are intentionally independent. A name can be structurally
+classical, have a weak/deprecated rationale, and still receive a separate
+CycloneDX primitive. In particular, SSH ``none`` is ``other`` with zero
+classical bits in the shared cipher classifier, while this module supplies the
+SSH-specific no-encryption note used by transport findings.
+
+Posture invariants:
+
+* every recognized PQ KEX is preserved as a hybrid candidate;
+* extension and strict-KEX markers are not classified as classical fallbacks;
+* unknown cipher names remain conservative through the shared classifier;
+* weakness notes are exact-name mappings so stronger algorithm variants are not
+  accidentally matched by a prefix.
+"""
 
 from __future__ import annotations
 
@@ -60,9 +88,11 @@ _WEAK_KEX_NOTES = MappingProxyType(
 _WEAK_KEX = frozenset(_WEAK_KEX_NOTES)
 
 # Weak/deprecated SSH transport ciphers, keyed to a justification note. Names are the
-# SSH cipher identifiers (RFC 4253/4344, OpenSSH). Matched by exact name.
+# SSH cipher identifiers (RFC 4253/4344, OpenSSH). Matched by exact name. Keep ``none``
+# here as well as in the shared classifier because SSH findings use this note map.
 _WEAK_CIPHER_NOTES = MappingProxyType(
     {
+        "none": "No encryption; NOT RECOMMENDED (RFC 4253 section 6.3)",
         "3des-cbc": "3DES: 64-bit block (SWEET32, RFC 7465-class); deprecated",
         "arcfour": "RC4 stream cipher (broken; removed from OpenSSH 7.6)",
         "arcfour128": "RC4 stream cipher (broken)",
@@ -81,6 +111,7 @@ _WEAK_MAC_NOTES = MappingProxyType(
         "hmac-md5": "HMAC-MD5 (broken hash)",
         "hmac-md5-96": "HMAC-MD5, 96-bit tag (broken hash)",
         "hmac-md5-etm@openssh.com": "HMAC-MD5 (broken hash)",
+        "none": "No integrity protection; NOT RECOMMENDED (RFC 4253 section 6.4)",
         "hmac-sha1": "HMAC-SHA1 (deprecated; SHA-1 collisions)",
         "hmac-sha1-96": "HMAC-SHA1, 96-bit tag (deprecated)",
         "hmac-sha1-etm@openssh.com": "HMAC-SHA1 (deprecated)",

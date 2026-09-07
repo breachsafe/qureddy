@@ -225,6 +225,50 @@ def test_weak_transport_finding_is_emitted() -> None:
     assert "hmac-md5" in finding.title
 
 
+def test_none_cipher_is_emitted_in_cbom_with_weak_annotation() -> None:
+    """Render SSH ``none`` as a zero-rated component with a weak annotation."""
+    # Exercise scanner evidence through rendering so the fix cannot stop at a
+    # helper-level classification and disappear from the customer CBOM.
+    result = _run(
+        ("curve25519-sha256",),
+        ("ssh-ed25519",),
+        ciphers=("none",),
+    )
+
+    payload = _cbom_components(result)
+    component = payload["crypto/algorithm/none"]
+    properties = component["cryptoProperties"]["algorithmProperties"]
+
+    assert properties == {"classicalSecurityLevel": 0, "primitive": "other"}
+    stream = io.StringIO()
+    render_cbom(result, stream)
+    assert any(
+        annotation["bom-ref"] == "annotation/01-ssh.transport.weak"
+        and "Weak SSH cipher or MAC offered (none)" in annotation["text"]
+        for annotation in json.loads(stream.getvalue())["annotations"]
+    )
+
+
+def test_none_mac_is_emitted_in_cbom_with_weak_annotation() -> None:
+    """Render SSH MAC ``none`` as a MAC component with a weak annotation."""
+    result = _run(
+        ("curve25519-sha256",),
+        ("ssh-ed25519",),
+        macs=("none",),
+    )
+
+    payload = _cbom_components(result)
+    properties = payload["crypto/algorithm/none"]["cryptoProperties"]["algorithmProperties"]
+    assert properties == {"primitive": "mac"}
+    stream = io.StringIO()
+    render_cbom(result, stream)
+    assert any(
+        annotation["bom-ref"] == "annotation/01-ssh.transport.weak"
+        and "Weak SSH cipher or MAC offered (none)" in annotation["text"]
+        for annotation in json.loads(stream.getvalue())["annotations"]
+    )
+
+
 def test_host_keys_emitted_as_cbom_components() -> None:
     # A5/#143: the CBOM previously dropped host keys; every offered host key must
     # now appear as a signature-classified crypto asset the endpoint provides.

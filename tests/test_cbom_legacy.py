@@ -15,6 +15,7 @@ import json
 
 import pytest
 
+from qureddy.core.ciphers import has_weak_cipher
 from qureddy.core.models import Asset, Evidence, ObservationType, Readiness, Severity
 from qureddy.output import cbom_legacy
 from qureddy.output.cbom import render_cbom
@@ -50,7 +51,11 @@ from tests.test_output import _build_result
         ("EXP-DES-CBC-SHA", 40),
         ("EXP1024-RC4-SHA", 56),
         # A NULL suite establishes no confidentiality: zero bits, stated.
+        # SSH ``none`` and IKE ``ENCR_NULL`` share this explicit zero-rating contract.
         ("NULL-MD5", 0),
+        ("none", 0),
+        ("ENCR_NULL", 0),
+        ("ENCR_3DES", 112),
         ("ECDHE-RSA-NULL-SHA", 0),
         # No primary source for GOST's classical strength, so it stays unrated.
         ("GOST2001-GOST89-GOST89", None),
@@ -83,6 +88,10 @@ def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
         ("ENCR_CHACHA20", "stream-cipher"),
         # No CycloneDX primitive describes "encrypts nothing".
         ("NULL-MD5", "other"),
+        ("none", "other"),
+        ("ENCR_NULL", "other"),
+        ("hmac-none", "unknown"),
+        ("nonexistent-cipher", "unknown"),
         # Unknown is explicit; it is not silently promoted to block-cipher.
         ("FUTURE-CIPHER-999", "unknown"),
     ],
@@ -90,6 +99,21 @@ def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
 def test_legacy_cipher_primitive(name: str, primitive: str) -> None:
     """Keep primitive mapping explicit for known, NULL, and future cipher names."""
     assert cipher_primitive(name).value == primitive
+
+
+def test_none_is_weak_in_shared_cipher_verdict() -> None:
+    """Keep SSH ``none`` weak when it enters the shared cipher verdict."""
+    # The shared verdict must preserve the same weakness when the SSH adapter
+    # supplies ``none`` instead of a TLS/legacy NULL suite name.
+    assert has_weak_cipher(("none",)) is True
+
+
+@pytest.mark.parametrize("name", ["hmac-none", "nonexistent-cipher", "ENCR_NONE"])
+def test_none_marker_does_not_match_unrelated_names(name: str) -> None:
+    """Keep the exact SSH ``none`` identifier from leaking into other names."""
+    assert cipher_classical_bits(name) is None
+    assert cipher_primitive(name).value == "unknown"
+    assert has_weak_cipher((name,)) is False
 
 
 def test_unrecognized_cipher_primitive_is_explicitly_unknown() -> None:
