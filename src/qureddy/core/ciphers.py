@@ -99,7 +99,9 @@ def _sized_family_bits(lowered: str, family: str) -> int | None:
 # Pass 1 of 3: rows that have to win against a substring of their own name.
 _PRE_FAMILY_BITS: tuple[tuple[tuple[str, ...], int], ...] = (
     (("chacha20",), 256),
+    (("rc4-64",), 64),
     (("exp1024",), 56),
+    (("export1024",), 56),
     (("exp-", "export"), 40),
     # NULL suites explicitly describe no confidentiality; retain a rated zero
     # instead of treating the observation as an unknown algorithm.
@@ -108,7 +110,7 @@ _PRE_FAMILY_BITS: tuple[tuple[tuple[str, ...], int], ...] = (
 )
 
 # Pass 2 of 3: size is in the name.
-_SIZED_FAMILIES: tuple[str, ...] = ("aes", "camellia", "aria")
+_SIZED_FAMILIES: tuple[str, ...] = ("aes", "camellia", "aria", "arcfour")
 
 # Pass 3 of 3: one size per family. RC4 and RC2 are the non-export forms.
 _POST_FAMILY_BITS: tuple[tuple[tuple[str, ...], int], ...] = (
@@ -180,6 +182,11 @@ def cipher_classical_bits(name: str) -> int | None:
     # marker. Keep it exact so names such as ``hmac-none`` remain unknown.
     if lowered == "none":
         return 0
+    # ENCR_3IDEA identifies a family without a reviewed strength. Resolve it
+    # before the generic IDEA row so the CBOM retains the observation while
+    # omitting an unsupported classicalSecurityLevel.
+    if "3idea" in lowered:
+        return None
     bits = _first_marker_bits(lowered, _PRE_FAMILY_BITS)
     if bits is not None:
         return bits
