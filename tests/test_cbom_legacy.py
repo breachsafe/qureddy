@@ -69,6 +69,17 @@ def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
         ("DES-CBC3-SHA", "block-cipher"),
         ("ECDHE-RSA-AES128-SHA", "block-cipher"),
         ("CAMELLIA256-SHA", "block-cipher"),
+        ("blowfish-cbc", "block-cipher"),
+        ("cast128-cbc", "block-cipher"),
+        ("twofish256-cbc", "block-cipher"),
+        ("serpent128-cbc", "block-cipher"),
+        ("rijndael-cbc@lysator.liu.se", "block-cipher"),
+        ("GOST2001-GOST89-GOST89", "block-cipher"),
+        ("GOST94-GOST89-GOST89", "block-cipher"),
+        ("TLS_CHACHA20_POLY1305_SHA256", "ae"),
+        ("ENCR_CHACHA20_POLY1305", "ae"),
+        ("chacha20", "stream-cipher"),
+        ("ENCR_CHACHA20", "stream-cipher"),
         # No CycloneDX primitive describes "encrypts nothing".
         ("NULL-MD5", "other"),
         # Unknown is explicit; it is not silently promoted to block-cipher.

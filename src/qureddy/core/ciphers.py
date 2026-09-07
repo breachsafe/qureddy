@@ -123,8 +123,27 @@ _POST_FAMILY_BITS: tuple[tuple[tuple[str, ...], int], ...] = (
 _PRIMITIVE_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     (("null",), "other"),
     (("gcm", "chacha20-poly1305", "ccm"), "ae"),
+    (("chacha20",), "stream-cipher"),
     (("rc4", "arcfour"), "stream-cipher"),
-    (("aes", "camellia", "aria", "chacha20", "seed", "idea", "rc2", "des"), "block-cipher"),
+    (
+        (
+            "aes",
+            "camellia",
+            "aria",
+            "seed",
+            "idea",
+            "rc2",
+            "des",
+            "blowfish",
+            "cast128",
+            "twofish",
+            "serpent",
+            "rijndael",
+            "gost2001-gost89",
+            "gost94-gost89",
+        ),
+        "block-cipher",
+    ),
 )
 
 
@@ -141,6 +160,11 @@ def _first_marker_bits(lowered: str, rules: tuple[tuple[tuple[str, ...], int], .
     return None
 
 
+def _normalise_cipher_name(name: str) -> str:
+    """Canonicalize case and protocol separator spelling before classification."""
+    return name.lower().replace("_", "-")
+
+
 def cipher_classical_bits(name: str) -> int | None:
     """Return sourced classical strength in bits, or ``None`` without a mapping.
 
@@ -149,7 +173,7 @@ def cipher_classical_bits(name: str) -> int | None:
     uncertainty into zero or a guessed value. Rule order handles export and 3DES
     names before their generic markers.
     """
-    lowered = name.lower()
+    lowered = _normalise_cipher_name(name)
     bits = _first_marker_bits(lowered, _PRE_FAMILY_BITS)
     if bits is not None:
         return bits
@@ -167,7 +191,7 @@ def cipher_primitive(name: str) -> str:
     unrecognized name remains ``unknown`` so downstream CBOM output cannot imply a
     cipher family that this table did not establish.
     """
-    lowered = name.lower()
+    lowered = _normalise_cipher_name(name)
     # A NULL suite encrypts nothing, so no cipher primitive describes it. The
     # CycloneDX enum has no "none" member, so "other" is the projection.
     return next(
