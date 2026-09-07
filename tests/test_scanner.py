@@ -472,3 +472,62 @@ class TestSummaryFailureCategorySupersededByRetrySuccess:
 
         assert summary.readiness is Readiness.TRANSITIONAL_HYBRID
         assert summary.failure_category is None
+
+    def test_classical_control_success_does_not_clear_hybrid_failure(self) -> None:
+        """Issue #836: a different probe's success cannot erase a timeout."""
+        target = ScanTarget(
+            original_input="split.example",
+            host="split.example",
+            port=443,
+            sni=None,
+            locator="tls://split.example:443",
+        )
+        asset = build_asset(target)
+        hybrid_failure = Evidence(
+            id="ev-hybrid-failure",
+            asset_id=asset.id,
+            evidence_type="tls.probe.failure",
+            observation_type=ObservationType.OBSERVED,
+            source="fixture",
+            probe_role=ProbeRole.HYBRID_READINESS,
+            failure_category=FailureCategory.TARGET_CONNECT_FAILED,
+        )
+        classical_success = Evidence(
+            id="ev-classical-success",
+            asset_id=asset.id,
+            evidence_type="tls.negotiation",
+            observation_type=ObservationType.NEGOTIATED,
+            source="fixture",
+            probe_role=ProbeRole.CLASSICAL_CONTROL,
+            negotiated_group="X25519",
+        )
+        findings = [
+            Finding(
+                id="f-hybrid-failure",
+                asset_id=asset.id,
+                evidence_ids=(hybrid_failure.id,),
+                rule_id="tls.hybrid.probe_failed",
+                finding_type="tls.kex.probe_failed",
+                title="hybrid probe failed",
+                description="d",
+                severity=Severity.INFO,
+                readiness=Readiness.UNKNOWN,
+                confidence=Confidence.MEDIUM,
+            ),
+            Finding(
+                id="f-classical-success",
+                asset_id=asset.id,
+                evidence_ids=(classical_success.id,),
+                rule_id="tls.classical.negotiated_x25519",
+                finding_type="tls.kex.classical",
+                title="classical control succeeded",
+                description="d",
+                severity=Severity.LOW,
+                readiness=Readiness.QUANTUM_VULNERABLE,
+                confidence=Confidence.HIGH,
+            ),
+        ]
+
+        summary = _build_summary(target, findings, [hybrid_failure, classical_success])
+
+        assert summary.failure_category is FailureCategory.TARGET_CONNECT_FAILED
