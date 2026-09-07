@@ -13,7 +13,7 @@ pipeline {
   agent any
 
   options {
-    timeout(time: 30, unit: 'MINUTES')
+    timeout(time: 60, unit: 'MINUTES')
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '30'))
   }
@@ -28,6 +28,7 @@ pipeline {
   environment {
     QUREDDY_OPENSSL = '/opt/homebrew/opt/openssl@3.5/bin/openssl'
     REPORT_DIR      = 'build/jenkins'
+    CBOMKIT_API     = 'http://127.0.0.1:8081'
 
     // Deliberately NOT named QUREDDY_LEGACY_OPENSSL here. The engine reads that
     // variable, and a pipeline-wide value reaches the unit stage, where
@@ -96,11 +97,69 @@ pipeline {
       }
     }
 
+
+    stage('live: local sshd') {
+      // The only PQ-positive live target in the suite. macOS OpenSSH offers
+      // mlkem768x25519-sha256 beside classical ECDH and SHA-1 MACs, so one scan
+      // reaches hybrid-offered, classical-alternative, weak-transport and
+      // terrapin. It also covers ssh_algorithms.py:143, the SSH call into
+      // cipher_primitive, which no TLS test can reach.
+      steps {
+        sh "uv run --locked pytest tests/live/test_live_ssh_local.py -q --junitxml=${REPORT_DIR}/ssh.xml"
+      }
+    }
+
+
     stage('live: canonical targets') {
       steps {
         sh "uv run --locked pytest tests/live/test_live_targets.py -q --junitxml=${REPORT_DIR}/live.xml"
       }
     }
+
+
+    stage('publish CBOMs') {
+      // Every scan above proves a rating; this keeps the artifact so a rating
+      // change is visible as a diff in the viewer rather than only as a pass or
+      // fail in a build log. Non-blocking: the pipeline's verdict is the tests,
+      // and a viewer that is down must not turn a green suite red.
+      environment { QUREDDY_LEGACY_OPENSSL = "${LEGACY_OPENSSL}" }
+      steps {
+        script {
+          def up = sh(returnStatus: true,
+                      script: "curl -sS -o /dev/null --max-time 5 ${CBOMKIT_API}/api/v1/cbom/last/1")
+          if (up != 0) {
+            echo "CBOMkit unreachable at ${CBOMKIT_API}; skipping publish"
+            return
+          }
+          sh '''
+            set -eu
+            sha=$(git rev-parse --short HEAD)
+            stamp=$(date -u +%Y-%m-%dT%H%M%SZ)
+            mkdir -p "$REPORT_DIR/cbom"
+            for target in badssl.com:443 3des.badssl.com:443 rc4.badssl.com:443 null.badssl.com:443; do
+              slug=$(echo "$target" | tr ':.' '--')
+              out="$REPORT_DIR/cbom/$slug.cdx.json"
+              # exit 2 is "findings present", the expected outcome for these hosts.
+              uv run --locked qureddy scan tls "$target" --format cbom -o "$out" || true
+              [ -s "$out" ] || { echo "no CBOM for $target" >&2; continue; }
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -X POST \
+                "$CBOMKIT_API/api/v1/cbom/qureddy-$slug-$sha-$stamp" \
+                -H 'Content-Type: application/json' --data-binary @"$out")
+              echo "$target -> HTTP $code"
+            done
+            uv run --locked qureddy scan ssh 127.0.0.1:22 --format cbom \
+              -o "$REPORT_DIR/cbom/ssh-localhost.cdx.json" || true
+            if [ -s "$REPORT_DIR/cbom/ssh-localhost.cdx.json" ]; then
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 -X POST \
+                "$CBOMKIT_API/api/v1/cbom/qureddy-ssh-localhost-$sha-$stamp" \
+                -H 'Content-Type: application/json' --data-binary @"$REPORT_DIR/cbom/ssh-localhost.cdx.json")
+              echo "ssh://127.0.0.1:22 -> HTTP $code"
+            fi
+          '''
+        }
+      }
+    }
+
 
     stage('no skipped tests') {
       // A skipped test reports as a pass in most summaries. The badssl stages skip
