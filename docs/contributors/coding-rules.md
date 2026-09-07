@@ -665,7 +665,7 @@ The rules are stricter than the average Python project on purpose. Crypto-touchi
 
 ## Section 21 — CI/CD Pipeline (7 Phases)
 
-CI runs as 7 sequential phases. Each phase produces an artifact. Phase 7 (Audit) reads every prior phase's artifact and verifies the run was complete and clean. **A passing exit code from `pytest` is not enough.** The audit phase asserts on specific facts: test count, coverage percent, scanned file count, security finding count, etc.
+CI runs as 7 dependency-ordered phases. Independent jobs may run in parallel after their prerequisites: Phase 3 integration and Phase 6 build verification both follow Phase 2, while Phase 7 (Audit) reads every prior phase's artifact and verifies the run was complete and clean. **A passing exit code from `pytest` is not enough.** The audit phase asserts on specific facts: test count, coverage percent, scanned file count, security finding count, etc.
 
 This structure exists because skim-passing is the failure mode. The audit phase catches tests that pass only because required work was skipped.
 
