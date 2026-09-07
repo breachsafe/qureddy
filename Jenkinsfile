@@ -28,7 +28,11 @@ pipeline {
   environment {
     QUREDDY_OPENSSL = '/opt/homebrew/opt/openssl@3.5/bin/openssl'
     REPORT_DIR      = 'build/jenkins'
-    CBOMKIT_API     = 'http://127.0.0.1:8081'
+    // Our fork on colima (breachsafe/cbomkit-backend:local + cbomkit-ui 0.2.0),
+    // NOT upstream ghcr.io/cbomkit/cbomkit. The stock stack was running in a second
+    // VM on :8081/:8001 and briefly received these scans; it held a separate,
+    // parallel history. Removed 2026-09-06. See the viewer repo's CLAUDE.md.
+    CBOMKIT_API     = 'http://127.0.0.1:8082'
 
     // Deliberately NOT named QUREDDY_LEGACY_OPENSSL here. The engine reads that
     // variable, and a pipeline-wide value reaches the unit stage, where
