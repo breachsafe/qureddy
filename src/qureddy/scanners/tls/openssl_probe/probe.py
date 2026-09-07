@@ -1,6 +1,19 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE
 # SPDX-License-Identifier: Apache-2.0
-"""TLS handshake probes executed through OpenSSL."""
+"""TLS handshake probes executed through OpenSSL.
+
+The probe owns process invocation and preserves the boundary between raw
+evidence and parser input:
+
+    probe arguments
+    ├── ``-brief`` transcript from OpenSSL
+    ├── stdout + stderr → ``parser_input`` → TLS negotiation parser
+    └── raw stdout/stderr → hashes and bounded excerpts → ``ProbeResult``
+
+The parser consumes the combined transcript because OpenSSL writes the
+``-brief`` status lines to stderr on the supported 3.5.x baseline. Keeping
+the raw streams separate preserves their independent integrity hashes.
+"""
 
 from __future__ import annotations
 
@@ -85,9 +98,10 @@ def _build_probe_args(
         host,
         port,
         sni,
-        # Keep the complete OpenSSL transcript. The parser extracts the
-        # negotiated facts, while -vvv/output-dir preserve the raw evidence.
-        extra=("-tls1_3", "-groups", group),
+        # ``parse_brief_output`` parses the stable ``-brief`` labels. OpenSSL
+        # writes this transcript to stderr; ``_run_probe`` combines both
+        # streams for parsing while retaining each raw stream for evidence.
+        extra=("-tls1_3", "-groups", group, "-brief"),
         starttls=starttls,
     )
 

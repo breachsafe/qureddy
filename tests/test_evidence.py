@@ -1,6 +1,12 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE
 # SPDX-License-Identifier: Apache-2.0
-"""Evidence builder tests for parser/probe integration."""
+"""Evidence builder tests for parser/probe integration.
+
+Test path:
+
+    fake OpenSSL transcript → ``ProbeResult`` → ``Evidence``
+                                      └──────→ parser failure category
+"""
 
 from __future__ import annotations
 
@@ -37,6 +43,7 @@ def test_evidence_parser_uses_full_probe_output_not_excerpt() -> None:
 
     assert probe.stdout_excerpt
     assert "Negotiated TLS1.3 group" not in probe.stdout_excerpt
+    assert "-brief" in probe.command.args
     assert evidence.negotiated_group == HYBRID_GROUP
     assert evidence.algorithm == HYBRID_GROUP
     assert evidence.primitive == "kem"
@@ -92,3 +99,23 @@ def test_evidence_preserves_live_handshake_details() -> None:
     assert evidence.handshake_signature == "rsa_pss_rsae_sha256"
     assert evidence.handshake_hash == "SHA256"
     assert evidence.key_bits == 253
+
+
+def test_real_probe_transcript_reaches_evidence_with_tls_fields() -> None:
+    """The probe-to-parser seam preserves fields emitted by ``s_client -brief``."""
+    probe = run_hybrid_probe(
+        fake_openssl("openssl_long_brief_output"),
+        host="example.com",
+        port=443,
+        sni="example.com",
+    )
+
+    evidence = evidence_from_probe(
+        asset=build_asset(_target()),
+        probe=probe,
+        expected_group=HYBRID_GROUP,
+        probe_role=ProbeRole.HYBRID_READINESS,
+    )
+
+    assert evidence.protocol_version == "TLSv1.3"
+    assert evidence.cipher_suite == "TLS_AES_256_GCM_SHA384"
