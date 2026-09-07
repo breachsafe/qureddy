@@ -40,10 +40,16 @@ elif scenario == "openssl_handshake_failure":
         print("ssl/tls alert handshake failure", file=sys.stderr)
         raise SystemExit(1)
 elif scenario == "openssl_long_brief_output":
-    print("certificate-chain-padding-" * 220)
-    print("Protocol version: TLSv1.3")
-    print("Ciphersuite: TLS_AES_256_GCM_SHA384")
-    print("Negotiated TLS1.3 group: X25519MLKEM768")
+    brief = "-brief" in sys.argv[3:]
+    stream = sys.stderr if brief else sys.stdout
+    print("certificate-chain-padding-" * 220, file=stream) if brief else None
+    if brief:
+        print("Protocol version: TLSv1.3", file=stream)
+        print("Ciphersuite: TLS_AES_256_GCM_SHA384", file=stream)
+    else:
+        print("New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384", file=stream)
+        print("Protocol: TLSv1.3", file=stream)
+    print("Negotiated TLS1.3 group: X25519MLKEM768", file=stream)
 elif scenario == "openssl_stream_boundary_phantom":
     print("Negotiated TLS1.3 group:", end="")
     print("X25519MLKEM768", file=sys.stderr)

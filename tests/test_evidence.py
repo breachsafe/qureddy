@@ -41,8 +41,8 @@ def test_evidence_parser_uses_full_probe_output_not_excerpt() -> None:
         probe_role=ProbeRole.HYBRID_READINESS,
     )
 
-    assert probe.stdout_excerpt
-    assert "Negotiated TLS1.3 group" not in probe.stdout_excerpt
+    assert probe.stderr_excerpt
+    assert "Negotiated TLS1.3 group" not in probe.stderr_excerpt
     assert "-brief" in probe.command.args
     assert evidence.negotiated_group == HYBRID_GROUP
     assert evidence.algorithm == HYBRID_GROUP
