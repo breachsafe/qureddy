@@ -46,12 +46,13 @@ def build_summary(
 # Issue #241: retry attempts accumulate rather than replace, so an earlier
 # failed attempt's Finding survives in the list alongside a later attempt's
 # success. A failure category must not outlive proof that the probe it
-# describes eventually succeeded.
+# describes eventually succeeded. The classical control result is deliberately
+# excluded: it is a separate diagnostic probe and cannot clear hybrid failure
+# (#836).
 _SUCCESS_RULE_IDS: frozenset[str] = frozenset(
     {
         "tls.hybrid.negotiated_pq",  # #330: renamed from ...negotiated_x25519mlkem768 (structural)
         "tls.pq.negotiated_pure",  # #330: a pure-PQ negotiation is also a reached-server success
-        "tls.classical.negotiated_x25519",
     }
 )
 
