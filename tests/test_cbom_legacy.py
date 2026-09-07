@@ -53,6 +53,17 @@ from tests.test_output import _build_result
         ("ECDHE-RSA-NULL-SHA", 0),
         # No primary source for GOST's classical strength, so it stays unrated.
         ("GOST2001-GOST89-GOST89", None),
+        # Underscore-spelled names reach the classifier from IANA TLS suites and
+        # IKEv2 transforms. _normalise_cipher_name rewrites "_" to "-", so every
+        # sized-family spelling has to survive that rewrite (PR fix/cbom-classifier-pr1).
+        ("TLS_AES_128_GCM_SHA256", 128),
+        ("TLS_AES_256_GCM_SHA384", 256),
+        ("TLS_CHACHA20_POLY1305_SHA256", 256),
+        # The size is a trailing token, not adjacent to the family name.
+        ("ENCR_AES_CBC_128", 128),
+        ("ENCR_AES_CBC_256", 256),
+        ("ENCR_AES_GCM_16_128", 128),
+        ("AES_256_CBC", 256),
     ],
 )
 def test_legacy_cipher_bits(name: str, bits: int | None) -> None:
