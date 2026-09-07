@@ -241,7 +241,9 @@ jobs:
   phase-3-integration:
     name: "Phase 3: Integration (${{ matrix.os }}, OpenSSL ${{ matrix.openssl.version }})"
     runs-on: ${{ matrix.os }}
-    needs: [phase-2-unit, phase-2-ike-windows]
+    # Unix integration uses the Unix unit matrix. Windows IKE remains an
+    # independent required context and must not delay unrelated Unix jobs.
+    needs: phase-2-unit
     strategy:
       fail-fast: false
       matrix:
@@ -381,7 +383,9 @@ jobs:
   phase-6-build:
     name: "Phase 6: Build"
     runs-on: ubuntu-latest
-    needs: phase-3-integration
+    # Package construction does not consume the OpenSSL integration result.
+    # Start it after unit coverage while keeping its own artifact audit intact.
+    needs: phase-2-unit
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -420,7 +424,9 @@ jobs:
   phase-7-audit:
     name: "Phase 7: Audit"
     runs-on: ubuntu-latest
-    needs: [phase-4-live, phase-5-self-scan, phase-6-build]
+    # Keep the independent Windows IKE artifact in the audit barrier after
+    # Phase 3 stops waiting on it for Unix integration.
+    needs: [phase-2-ike-windows, phase-4-live, phase-5-self-scan, phase-6-build]
     # The audit covers live artifacts, so it is an advisory scheduled/manual signal too.
     if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
 
