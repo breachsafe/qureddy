@@ -6,6 +6,17 @@ Pure functions that turn a `ProbeResult` into the locked `Evidence`
 shape downstream consumers (policy, summary, JSON output) expect.
 Extracted from `scanner.py` to keep that file under the 400-line
 hard ceiling.
+
+Evidence projection:
+
+    ``ProbeResult.parser_input``
+    └── ``parse_brief_output``
+        ├── protocol version + cipher suite → negotiation evidence
+        ├── key-exchange group → algorithm profile fields
+        └── parser or probe failure → explicit failure evidence
+
+The CBOM renderer consumes the resulting ``Evidence`` record. This module
+does not reconstruct negotiated values from probe arguments or excerpts.
 """
 
 from __future__ import annotations

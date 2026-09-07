@@ -17,9 +17,20 @@ The pinned baseline emits ``Peer Temp Key:``. The parser accepts both for
 forward and backward compatibility but always anchors at line start so a
 ClientHello-derived dump cannot satisfy the pattern.
 
-Input contract: stdout is decoded UTF-8 text. Comment-prefix stripping
-and ANSI-escape removal are caller responsibilities; the parser does
-not normalize input.
+Input contract: the combined stdout/stderr transcript is decoded UTF-8 text.
+OpenSSL commonly writes ``s_client -brief`` status lines to stderr. The
+caller joins the streams with a line boundary; comment-prefix stripping and
+ANSI-escape removal remain caller responsibilities.
+
+Parsing path:
+
+    combined transcript
+    ├── protocol version + cipher suite → ``Evidence`` fields
+    ├── negotiated group → key-exchange classification
+    └── missing or conflicting server evidence → explicit failure category
+
+The parser reports observed values only. It does not infer a cipher suite or
+protocol version from the command arguments when OpenSSL omits them.
 """
 
 from __future__ import annotations
@@ -66,7 +77,7 @@ HASH_USED = re.compile(
 
 @dataclass(frozen=True, slots=True)
 class ParsedNegotiation:
-    """Structured outcome of parsing one probe's stdout.
+    """Structured outcome of parsing one probe's brief transcript.
 
     Plain frozen dataclass, not a Pydantic model: this is internal,
     parser-to-scanner state. The scanner converts these into the
@@ -84,10 +95,12 @@ class ParsedNegotiation:
 
 
 def parse_brief_output(stdout: str, *, expected_group: str) -> ParsedNegotiation:
-    """Parse `openssl s_client -brief` stdout into a ParsedNegotiation.
+    """Parse an ``openssl s_client -brief`` transcript into negotiation data.
 
     Args:
-        stdout: Raw stdout from a real or fixture-replayed s_client run.
+        stdout: Combined decoded stdout/stderr from a real or fixture-replayed
+            ``s_client`` run. The historical parameter name remains for the
+            internal parser API.
         expected_group: The TLS 1.3 group the probe was configured to
             negotiate. Used as a gate: when ServerHello-derived evidence
             names a different group, the parser emits UNEXPECTED_GROUP

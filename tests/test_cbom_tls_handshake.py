@@ -1,6 +1,12 @@
 # SPDX-FileCopyrightText: 2026 BreachSAFE
 # SPDX-License-Identifier: Apache-2.0
-"""JSON and CBOM parity tests for live TLS handshake details."""
+"""JSON and CBOM parity tests for live TLS handshake details.
+
+Test path:
+
+    probe transcript → parsed Evidence → ScanResult → CycloneDX CBOM
+                              └──────────────→ TLS fields and cipher asset
+"""
 
 from __future__ import annotations
 
@@ -10,10 +16,13 @@ import pytest
 
 from qureddy.core.certificate import CertificateObservation
 from qureddy.core.errors import CbomError
-from qureddy.core.models import Evidence, ObservationType, ScanResult
+from qureddy.core.models import Evidence, ObservationType, ProbeRole, ScanResult
 from qureddy.output.cbom_semantics import validate_cbom_semantics
+from qureddy.scanners.tls._evidence import build_asset, evidence_from_probe
+from qureddy.scanners.tls.openssl_probe import HYBRID_GROUP, run_hybrid_probe
 from qureddy.scanners.tls.parse import parse_brief_output
 from tests._cbom_fixtures import _build_result, _render
+from tests._fake_openssl import fake_openssl
 from tests.conformance.harness import official_errors, semantic_errors
 
 FIXTURES = Path(__file__).parent / "fixtures" / "openssl"
@@ -92,6 +101,31 @@ def test_cbom_emits_live_certificate_verify_signature() -> None:
     assert component["cryptoProperties"]["algorithmProperties"]["primitive"] == "signature"
     assert properties["qureddy:signature.role"] == "tls.handshake.certificate_verify"
     assert properties["qureddy:signature.hash"] == "SHA256"
+
+
+def test_live_probe_fields_reach_tls_cipher_suite_cbom_asset() -> None:
+    """A parsed probe result produces the negotiated suite in the CBOM."""
+    result = _build_result()
+    probe = run_hybrid_probe(
+        fake_openssl("openssl_long_brief_output"),
+        host="example.com",
+        port=443,
+        sni="example.com",
+    )
+    evidence = evidence_from_probe(
+        asset=build_asset(result.target),
+        probe=probe,
+        expected_group=HYBRID_GROUP,
+        probe_role=ProbeRole.HYBRID_READINESS,
+    )
+
+    payload = _render(result.model_copy(update={"evidence": (evidence,)}))
+    component = next(
+        item for item in payload["components"] if item["name"] == "TLS_AES_256_GCM_SHA384"
+    )
+
+    assert evidence.protocol_version == "TLSv1.3"
+    assert evidence.cipher_suite == component["name"]
 
 
 def test_real_mldsa_handshake_alias_reuses_canonical_certificate_component() -> None:
