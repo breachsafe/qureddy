@@ -93,6 +93,11 @@ def _build_probe_args(
     group: str,
     starttls: StartTLSMode | None = None,
 ) -> list[str]:
+    """Build the bounded TLS 1.3 command consumed by the brief parser.
+
+    ``-brief`` is part of the probe/parser contract. The forced group remains
+    an explicit argument so the parser can reject a different negotiated group.
+    """
     return build_s_client_args(
         openssl_path,
         host,
@@ -112,6 +117,12 @@ def _run_probe(
     timeout_seconds: int,
     attempt_number: int,
 ) -> ProbeResult:
+    """Execute one probe and preserve raw streams plus combined parser input.
+
+    Launch, timeout, and non-zero-exit handling stay in the existing executor
+    and failure classifier. This function records their result and supplies
+    the complete combined transcript to the TLS evidence parser.
+    """
     started = datetime.now(UTC)
     log_subprocess_start(args, timeout_seconds, attempt_number)
     outcome = execute(args, timeout_seconds=timeout_seconds)
